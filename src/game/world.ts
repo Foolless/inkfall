@@ -1,13 +1,18 @@
 import type { InputFrame } from '../engine/input.js'
 import { CHARGED_TIER, DISPLAY, FULL, RULES, type TierIndex } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
-import { parseTiles, Tile, type TileMap } from './tilemap.js'
+import { Tile, type TileMap } from './tilemap.js'
+import { loadLevel, type LevelDef, type LoadedLevel } from '../content/levels/format.js'
 import { createPlayer, promote, setTier, updatePlayer, type Player, type PlayerStepContext } from './player.js'
 
 const T = DISPLAY.TILE
 
+export type PickupKind = 'inkBulb' | 'inkCore' | 'shell' | 'pearl'
+
 export interface Pickup extends Box {
-  kind: 'inkBulb' | 'inkCore'
+  kind: PickupKind
+  /** Pearl slot 0-2 on the world map; -1 for everything else. */
+  id: number
   taken: boolean
 }
 
@@ -27,32 +32,34 @@ export interface World {
   frame: number
   cleared: boolean
   respawnTimer: number
+  /** 100 shells is an extra life, and shells reset on a continue. */
+  shells: number
+  /** Which of this level's three pearls have been picked up this run. */
+  pearls: [boolean, boolean, boolean]
 }
 
-export interface LevelDef {
-  id: string
-  name: string
-  chapter: string
-  order: number
-  tiles: readonly string[]
-}
+/** Collectible footprints, centred in their tile. Generous, not pixel-exact. */
+const PICKUP_BOX: Record<PickupKind, number> = { inkBulb: 8, inkCore: 8, shell: 6, pearl: 8 }
 
-export function createWorld(def: LevelDef): World {
-  const map = parseTiles(def.tiles)
-  const start = map.entities.find((e) => e.kind === 'start')!
-  const exitMark = map.entities.find((e) => e.kind === 'exit')
+export function createWorld(source: LevelDef | LoadedLevel): World {
+  const level = 'map' in source ? source : loadLevel(source)
+  const { map } = level
 
-  const spawn = { x: start.tx * T + 2, y: start.ty * T + 2 }
-  const pickups: Pickup[] = map.entities
-    .filter((e) => e.kind === 'inkBulb' || e.kind === 'inkCore')
-    .map((e) => ({
-      kind: e.kind as 'inkBulb' | 'inkCore',
-      x: e.tx * T + 4,
-      y: e.ty * T + 4,
-      w: 8,
-      h: 8,
-      taken: false,
-    }))
+  const spawn = { x: level.start.x * T + 2, y: level.start.y * T + 2 }
+  const pickups: Pickup[] = level.entities
+    .filter((e) => e.type === 'inkBulb' || e.type === 'inkCore' || e.type === 'shell' || e.type === 'pearl')
+    .map((e) => {
+      const size = PICKUP_BOX[e.type as PickupKind]
+      return {
+        kind: e.type as PickupKind,
+        id: e.type === 'pearl' ? e.id : -1,
+        x: e.x * T + (T - size) / 2,
+        y: e.y * T + (T - size) / 2,
+        w: size,
+        h: size,
+        taken: false,
+      }
+    })
 
   return {
     map,
@@ -63,10 +70,12 @@ export function createWorld(def: LevelDef): World {
     respawning: new Map(),
     spawn,
     checkpoint: null,
-    exit: exitMark ? { x: exitMark.tx * T, y: exitMark.ty * T, w: T, h: T } : null,
+    exit: level.exit ? { x: level.exit.x * T, y: level.exit.y * T, w: T, h: T } : null,
     frame: 0,
     cleared: false,
     respawnTimer: 0,
+    shells: 0,
+    pearls: [false, false, false],
   }
 }
 
@@ -111,11 +120,22 @@ function tickCrumble(w: World): void {
 
 function collectPickups(w: World): void {
   for (const pick of w.pickups) {
-    if (pick.taken || !boxesOverlap(w.player, pick)) continue
+    if (pick.taken || !w.player.alive || !boxesOverlap(w.player, pick)) continue
     pick.taken = true
-    // A Core promotes one rung like a Bulb does — but its ceiling is Charged.
-    const ceiling: TierIndex = pick.kind === 'inkCore' ? CHARGED_TIER : FULL
-    promote(w.map, w.player, ceiling, w.collapsed)
+    switch (pick.kind) {
+      case 'shell':
+        w.shells++
+        break
+      case 'pearl':
+        // Persistent across runs — the save layer reads this on level clear.
+        if (pick.id >= 0) w.pearls[pick.id] = true
+        break
+      default: {
+        // A Core promotes one rung like a Bulb does — but its ceiling is Charged.
+        const ceiling: TierIndex = pick.kind === 'inkCore' ? CHARGED_TIER : FULL
+        promote(w.map, w.player, ceiling, w.collapsed)
+      }
+    }
   }
 }
 
@@ -156,8 +176,9 @@ export function respawn(w: World): void {
 }
 
 /** Restart cleanly — used by tests and by the debug reset key. */
-export function resetWorld(def: LevelDef): World {
-  return createWorld(def)
+export function resetWorld(source: LevelDef | LoadedLevel): World {
+  return createWorld(source)
 }
 
 export { Tile }
+export type { LevelDef, LoadedLevel }

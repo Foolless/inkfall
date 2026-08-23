@@ -49,7 +49,7 @@ describe('crumble tiles', () => {
 
 describe('pickups', () => {
   test('an Ink Bulb is consumed once and promotes one tier', () => {
-    const w = worldWith(['S....b....', '##########'])
+    const w = worldWith(['S.........', '##########'], [{ type: 'inkBulb', x: 5, y: 0 }])
     setTier(w.map, w.player, SPENT)
     const d = new Driver(w)
     d.step(0, 20)
@@ -67,7 +67,7 @@ describe('pickups', () => {
   })
 
   test('an Ink Core promotes Full all the way to Charged', () => {
-    const w = worldWith(['S....o....', '##########'])
+    const w = worldWith(['S.........', '##########'], [{ type: 'inkCore', x: 5, y: 0 }])
     const d = new Driver(w)
     d.step(0, 20)
     d.step(Act.Right, 200)
@@ -75,7 +75,7 @@ describe('pickups', () => {
   })
 
   test('an Ink Core taken while Spent stops at Full — no skipping a rung', () => {
-    const w = worldWith(['S....o....', '##########'])
+    const w = worldWith(['S.........', '##########'], [{ type: 'inkCore', x: 5, y: 0 }])
     setTier(w.map, w.player, SPENT)
     const d = new Driver(w)
     d.step(0, 20)

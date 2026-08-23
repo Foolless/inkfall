@@ -4,7 +4,7 @@ import { DebugOverlay } from './engine/debug.js'
 import { Keyboard } from './engine/input.js'
 import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
-import { greybox } from './content/greybox.js'
+import { greybox } from './content/levels/greybox.js'
 import { createWorld, respawn, resetWorld, update } from './game/world.js'
 
 const canvas = document.getElementById('game')

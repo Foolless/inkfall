@@ -1,6 +1,7 @@
 import { Act, frameFromMasks, type InputFrame } from '../src/engine/input.js'
 import { DISPLAY, PHYSICS } from '../src/game/constants.js'
 import { createWorld, update, type LevelDef, type World } from '../src/game/world.js'
+import type { EntityDef } from '../src/content/levels/format.js'
 
 export const TILE = DISPLAY.TILE
 
@@ -14,12 +15,12 @@ export function flatGround(width = 200): string[] {
   return rows
 }
 
-export function levelFrom(tiles: string[], id = 'test'): LevelDef {
-  return { id, name: id, chapter: 'test', order: 0, tiles }
+export function levelFrom(tiles: string[], id = 'test', entities: readonly EntityDef[] = []): LevelDef {
+  return { id, name: id, chapter: 'test', order: 0, tiles, entities }
 }
 
-export function worldWith(tiles: string[]): World {
-  return createWorld(levelFrom(tiles))
+export function worldWith(tiles: string[], entities: readonly EntityDef[] = []): World {
+  return createWorld(levelFrom(tiles, 'test', entities))
 }
 
 /** Drop the player onto the ground so tests start from a settled state. */

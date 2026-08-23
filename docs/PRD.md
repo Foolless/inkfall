@@ -897,6 +897,13 @@ export const tidepools: LevelDef = {
 
 Coordinates in the `entities` array are **tile coordinates**, not pixels. A parser in `format.ts` validates on load and throws loudly in dev on an unknown legend character or an out-of-bounds entity.
 
+**One concept, one home.** The grid carries *geometry* — terrain plus the three markers that are positions in the world: `S` start, `E` exit, `K` checkpoint. The `entities` array carries everything that *acts or is collected*: enemies, hazards with state, shells, pearls, Ink Bulbs, Ink Cores. Nothing may be authored in both. The sketch above showed checkpoints as a separate array as well as a legend character; that was two authorities for one fact, and a level with three conches in the grid and two in the list is a bug nobody would find. There is no `checkpoints:` field.
+
+Validation runs at two levels, because a physics fixture is a grid but not a level:
+
+- `loadLevel` — structural. Rejects ragged rows, unknown glyphs, two starts, entities outside the grid or buried in solid tiles, backwards patrol ranges, duplicate pearl slots, a non-positive Drifter period.
+- `loadCampaignLevel` — the rules a *shipped* level must also satisfy: it can be finished (an exit or a boss), it has exactly two conches plus one at the boss door, exactly three pearls, and an Ink Bulb count inside §4.5's range.
+
 ### 12.6 Performance budget
 
 | Budget | Limit |
@@ -1112,6 +1119,7 @@ export const DISPLAY = {
 | Damage model | Three tiers, Mario-style *(v1.2; was one-hit death in v1.0, two tiers in v1.1)* | One-hit death; a health bar | The tier and the ink budget are the **same resource**, so a hit tightens the next jump instead of ticking a counter. Difficulty moves into sparse checkpoints, where it belongs. |
 | Ink capacity when small | 2 pips | 3 pips regardless of size | If being small cost nothing but a hitbox, the tier would be free. Losing a pip is the cost that makes an Ink Bulb worth crossing a room for. |
 | What Charged grants | A **damaging dash** | More pips; more speed; armor | Pips belong to Deep Jet — keeping them orthogonal means Charged and Deep Jet teach different things. Making the dash *more* beats adding a button. |
+| Level authoring split | Grid owns geometry, `entities` owns actors | Checkpoints and pickups in both; everything in one list | Found in Phase 2: §12.5 sketched checkpoints as a legend character *and* an array. Two authorities for one fact is how a level ends up with three conches in the grid and two in the list. Terrain markers are positions, so they stay in the grid; anything that moves, ticks or is collected goes in the typed list. |
 | Currents are fluid | A current tile floats you | A separate "dry current" tile type | Found in Phase 1: a current drawn over water replaces the water glyph, so Nib sank through an updraft he should have ridden. The game is underwater; the simple rule is the correct one. |
 | v1 scope | 5 levels, architected for ~50 | Building toward 50 now; ignoring 50 entirely | Five is the deliverable. §12.7 is a set of cheap constraints, not scope — retrofitting stable ids and chapter-owned tilesets later is a rewrite. |
 | Worlds | Ocean descent | Fish-out-of-water; Mario mapping; ink surrealism | Descent gives an emotional arc a level list can't |
