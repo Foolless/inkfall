@@ -4,7 +4,7 @@
 **Genre:** 2D side-scrolling action platformer
 **Player character:** Nib, a squid
 **Scope:** 5 levels, one boss each
-**Status:** Draft v1.2 — design locked, not yet built
+**Status:** Draft v1.3 — Phase 1 built; constants retuned against the feel-guarantee tests
 **Scope:** v1 ships **5 levels**. The architecture must not foreclose ~50 (§12.7).
 **Owner:** richard.andrew.young@gmail.com
 **Last updated:** 2026-08-23
@@ -148,24 +148,24 @@ All values in **pixels per frame** at a fixed **60 Hz** timestep. These are the 
 | `WALK_MAX` | 1.60 | |
 | `RUN_MAX` | 2.60 | While Run held |
 | `RUN_ACCEL` | 0.24 | |
-| `GROUND_FRICTION` | 0.22 | Applied on no input |
+| `GROUND_FRICTION` | 0.24 | Applied on no input. *(was 0.22 — stopped in exactly 12 frames, no margin)* |
 | `AIR_ACCEL` | 0.10 | Meaningful air control, Mario-3-like |
 | `AIR_DRAG` | 0.04 | |
-| `JUMP_IMPULSE` | −4.60 | ≈ 3.4 tiles at full run |
+| `JUMP_IMPULSE` | −6.60 | ≈ 3.2 tiles high. *(was −4.60, which cleared only 1.6 tiles against a stated guarantee of 3)* |
 | `JUMP_CUT` | −1.80 | On jump release, `vy = max(vy, JUMP_CUT)` |
 | `COYOTE_FRAMES` | 6 | Jump allowed after leaving ledge |
 | `JUMP_BUFFER_FRAMES` | 6 | Jump pressed before landing still fires |
-| `STOMP_BOUNCE` | −3.40 | |
-| `STOMP_BOUNCE_HELD` | −4.80 | If jump held on contact |
+| `STOMP_BOUNCE` | −4.60 | Rescaled against the new jump impulse |
+| `STOMP_BOUNCE_HELD` | −6.20 | If jump held on contact |
 
 #### Ink dash
 
 | Constant | Value | Note |
 |---|---|---|
-| `DASH_SPEED` | 5.20 | Land |
-| `DASH_SPEED_WATER` | 6.00 | Water is Nib's element |
-| `DASH_LOCK_FRAMES` | 8 | Velocity locked, gravity suspended |
-| `DASH_CARRYOVER` | 0.60 | Fraction of dash velocity retained on release |
+| `DASH_SPEED` | 5.60 | Land. *(was 5.20 — the 7-tile guarantee missed by half a tile)* |
+| `DASH_SPEED_WATER` | 6.40 | Water is Nib's element |
+| `DASH_LOCK_FRAMES` | 10 | Velocity locked, gravity suspended. *(was 8)* |
+| `DASH_CARRYOVER` | 0.72 | Fraction of dash velocity retained on release. *(was 0.60)* |
 | `DASH_COOLDOWN` | 10 | Frames before another dash may start |
 | `DASH_COST` | 1 pip | |
 | `INK_MAX` | 3 pips | |
@@ -194,7 +194,7 @@ Only these values change across the three tiers. Everything not listed — accel
 | Sprite / hitbox | 12×12 / **10×10** | 16×16 / 12×14 | 16×16 / 12×14 | Only Spent fits a 1-tile gap |
 | `INK_MAX` | **2** | 3 | 3 | Charged adds no pips — that's Deep Jet's job (§8.5) |
 | `GRAVITY` | **0.40** | 0.42 | 0.42 | |
-| `JUMP_IMPULSE` | **−4.75** | −4.60 | −4.60 | Small is not strictly worse |
+| `JUMP_IMPULSE` | **−6.80** | −6.60 | −6.60 | Small is not strictly worse |
 | `RUN_MAX` | **2.70** | 2.60 | 2.60 | |
 | Crumble tile hold | **36f** | 24f | 24f | Less weight on the sand |
 | Dash damage | none | none | **kills unarmored** | See §4.4 |
@@ -206,7 +206,7 @@ Only these values change across the three tiers. Everything not listed — accel
 These are the invariants tuning must preserve. If a constant change breaks one, the change is wrong.
 
 1. A full-run jump clears **4 tiles horizontal, 3 tiles vertical**.
-2. A standing jump + one horizontal dash clears **7 tiles horizontal**.
+2. A standing jump + one horizontal dash clears **7 tiles horizontal**, for any dash taken within **±6 frames of the apex**. A dash taken immediately off the ground falls short, because a horizontal dash zeroes vertical velocity and forfeits the remaining airtime — level design may rely on the window, not on the instant.
 3. A jump + upward dash reaches **6 tiles vertical**.
 4. Nib comes to a full stop from run speed in **≤ 12 frames**.
 5. Time from jump press to leaving the ground is **1 frame**. No wind-up, ever.
@@ -328,7 +328,7 @@ Each enemy exists to teach or test one thing. If two enemies test the same thing
 | **Urchin spikes** | all | Static instant death. Always drawn on a contrasting tile so they read at a glance. |
 | **Crush clam** | 1, 3 | Opens 90 frames, slams in 6. Instant death in the mouth; the shell is a platform when closed. |
 | **Collapsing sand** | 1, 4 | Crumbles 24 frames after Nib lands. Respawns 180 frames later. Visible cracks as a timer. |
-| **Current** | 2, 5 | Directional force zone. Visualised as drifting particles — never invisible. |
+| **Current** | 2, 5 | Directional force zone, drawn with drifting particles — never invisible. **Current tiles count as fluid**: a current inside a pool still floats you rather than silently switching Nib to land gravity. The whole game is underwater, so every current in it is a water current. |
 | **Bubble stream** | 2, 3 | Rising bubbles act as one-frame-of-contact platforms with `−1.2` upward carry. Pop after 1 use. |
 | **Rising magma** | 4 | Room-scale timer. Rises at 0.25 px/f. Instant death. One-way vertical pressure. |
 | **Pressure crush** | 5 | The abyss itself. In two rooms, staying still for > 180 frames triggers a closing vignette and then death. Move or die. |
@@ -1026,16 +1026,16 @@ Every number a designer touches, in one place. Changing any of these requires re
 export const PHYSICS = {
   GRAVITY: 0.42, TERMINAL_FALL: 6.0,
   WALK_ACCEL: 0.18, WALK_MAX: 1.6, RUN_ACCEL: 0.24, RUN_MAX: 2.6,
-  GROUND_FRICTION: 0.22, AIR_ACCEL: 0.10, AIR_DRAG: 0.04,
-  JUMP_IMPULSE: -4.6, JUMP_CUT: -1.8,
+  GROUND_FRICTION: 0.24, AIR_ACCEL: 0.10, AIR_DRAG: 0.04,
+  JUMP_IMPULSE: -6.6, JUMP_CUT: -1.8,
   COYOTE_FRAMES: 6, JUMP_BUFFER_FRAMES: 6,
-  STOMP_BOUNCE: -3.4, STOMP_BOUNCE_HELD: -4.8,
+  STOMP_BOUNCE: -4.6, STOMP_BOUNCE_HELD: -6.2,
 } as const;
 
 export const INK = {
   MAX: 3, DASH_COST: 1,
-  DASH_SPEED: 5.2, DASH_SPEED_WATER: 6.0,
-  DASH_LOCK_FRAMES: 8, DASH_CARRYOVER: 0.6,
+  DASH_SPEED: 5.6, DASH_SPEED_WATER: 6.4,
+  DASH_LOCK_FRAMES: 10, DASH_CARRYOVER: 0.72,
   DASH_COOLDOWN: 10, DASH_IFRAMES: 4,
   REFILL_GROUND: 45, REFILL_WATER: 20, REFILL_AIR: Infinity,
   STOMP_REFUND: 1,
@@ -1049,9 +1049,9 @@ export const WATER = {
 // Tiers — only these values differ; everything else is shared.
 // Order matters: a hit steps one index down, a pickup one index up.
 export const TIERS = [
-  { id: "spent",   inkMax: 2, box: [10,10], gravity: 0.40, jump: -4.75, runMax: 2.70, crumbleHold: 36, dashKills: false },
-  { id: "full",    inkMax: 3, box: [12,14], gravity: 0.42, jump: -4.60, runMax: 2.60, crumbleHold: 24, dashKills: false },
-  { id: "charged", inkMax: 3, box: [12,14], gravity: 0.42, jump: -4.60, runMax: 2.60, crumbleHold: 24, dashKills: true  },
+  { id: "spent",   inkMax: 2, box: [10,10], gravity: 0.40, jump: -6.80, runMax: 2.70, crumbleHold: 36, dashKills: false },
+  { id: "full",    inkMax: 3, box: [12,14], gravity: 0.42, jump: -6.60, runMax: 2.60, crumbleHold: 24, dashKills: false },
+  { id: "charged", inkMax: 3, box: [12,14], gravity: 0.42, jump: -6.60, runMax: 2.60, crumbleHold: 24, dashKills: true  },
 ] as const;
 
 export const CHARGED = {
@@ -1112,6 +1112,7 @@ export const DISPLAY = {
 | Damage model | Three tiers, Mario-style *(v1.2; was one-hit death in v1.0, two tiers in v1.1)* | One-hit death; a health bar | The tier and the ink budget are the **same resource**, so a hit tightens the next jump instead of ticking a counter. Difficulty moves into sparse checkpoints, where it belongs. |
 | Ink capacity when small | 2 pips | 3 pips regardless of size | If being small cost nothing but a hitbox, the tier would be free. Losing a pip is the cost that makes an Ink Bulb worth crossing a room for. |
 | What Charged grants | A **damaging dash** | More pips; more speed; armor | Pips belong to Deep Jet — keeping them orthogonal means Charged and Deep Jet teach different things. Making the dash *more* beats adding a button. |
+| Currents are fluid | A current tile floats you | A separate "dry current" tile type | Found in Phase 1: a current drawn over water replaces the water glyph, so Nib sank through an updraft he should have ridden. The game is underwater; the simple rule is the correct one. |
 | v1 scope | 5 levels, architected for ~50 | Building toward 50 now; ignoring 50 entirely | Five is the deliverable. §12.7 is a set of cheap constraints, not scope — retrofitting stable ids and chapter-owned tilesets later is a rewrite. |
 | Worlds | Ocean descent | Fish-out-of-water; Mario mapping; ink surrealism | Descent gives an emotional arc a level list can't |
 | Input | Keyboard only | Gamepad; touch; all three | Tuning focus; touch would compromise precision |

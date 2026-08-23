@@ -2,7 +2,7 @@
 
 A NES-difficulty 2D platformer about a squid descending from a sunlit tide pool to the abyss.
 
-**Status:** design phase — documentation only, no code yet. Start with the PRD.
+**Status:** Phase 1 complete — a playable grey box, awaiting the Gate 1 playtest.
 
 📄 **[docs/PRD.md](docs/PRD.md)** — what the game is
 🛠️ **[docs/PLAN.md](docs/PLAN.md)** — how it gets built: four phases, checkpoints, testing, hosting
@@ -40,12 +40,26 @@ tilesets, a data-driven world map — so that growing the game later is content 
 than a rewrite. None of that scaffolding is built ahead of time; it is a set of rules about
 how v1 is built.
 
+## Running it
+
+```bash
+npm install
+npm run dev       # the grey box, at http://localhost:5173
+npm run verify    # typecheck + lint + 164 unit tests + build + bundle size
+npm run smoke     # 4 Playwright browser tests
+```
+
+`npm run dev` also serves the sprite editor at `/tools/sprite-editor/`.
+
+In the grey box: **arrows/WASD** move, **Space** jumps, **Shift** runs, **X** is the ink
+dash, **R** restarts, **F1** opens the debug overlay (hitboxes, velocity, frame-time graph).
+
 ## Building it
 
-Nothing to build yet. [PLAN.md](docs/PLAN.md) breaks the work into four phases, each ending
-with a playable build at a public URL and a gate that a machine can't pass for you:
+[PLAN.md](docs/PLAN.md) breaks the work into four phases, each ending with a playable build
+at a public URL and a gate that a machine can't pass for you:
 
-1. **Engine & Feel** — a deployable grey box where Nib moves perfectly and nothing else
+1. **Engine & Feel** ✅ — a deployable grey box where Nib moves perfectly and nothing else
    exists. Its gate is a genuine go/no-go: if the ink dash isn't fun with no content around
    it, the project stops there rather than at Phase 4.
 2. **One Real Level** — World 1 complete, proving the whole pipeline once instead of five

@@ -5,7 +5,7 @@
 Companion to [PRD.md](PRD.md), which says *what* the game is. This says how it gets built,
 in what order, and how we know each piece actually works.
 
-**Status:** Phase 1 not started
+**Status:** ✅ Phase 1 complete — awaiting Gate 1
 **Last updated:** 2026-08-23
 
 ---
@@ -39,7 +39,7 @@ smoke test and human eyes. Chasing coverage through draw calls is wasted effort.
 
 | Phase | What it produces | Exit gate | Rough effort |
 |---|---|---|---|
-| **1 · Engine & Feel** | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun | 8–12 days |
+| **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — *pending* | 8–12 days |
 | **2 · One Real Level** | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min | 12–18 days |
 | **3 · All Five Levels** | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier | 20–30 days |
 | **4 · Meta & Ship** | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB | 15–22 days |
@@ -54,9 +54,38 @@ checkpoint rather than an afterthought.
 
 ---
 
-# Phase 1 · Engine & Feel
+# Phase 1 · Engine & Feel ✅
 
 > **Goal:** prove the ink dash is fun before a single sprite or enemy exists.
+
+**Built.** All nine checkpoints are green on `main`: 164 unit tests, 4 browser
+smoke tests, 98% statement coverage of the simulation core, 11 kB gzipped.
+Gate 1 is the remaining step, and it needs three humans.
+
+### What the tests changed
+
+The feel guarantees earned their keep on day one. Four constants from the PRD
+did not survive contact with them:
+
+| Constant | PRD | Now | Why |
+|---|---|---|---|
+| `JUMP_IMPULSE` | −4.60 | **−6.60** | Cleared 1.6 tiles against a stated guarantee of 3 |
+| `DASH_SPEED` | 5.20 | **5.60** | The 7-tile guarantee missed by half a tile |
+| `DASH_LOCK_FRAMES` | 8 | **10** | Same |
+| `DASH_CARRYOVER` | 0.60 | **0.72** | Same |
+| `GROUND_FRICTION` | 0.22 | **0.24** | Stopped in exactly 12 frames — no margin at all |
+
+Two engine bugs surfaced the same way. The dash was delivering one frame fewer
+of full-speed travel than `DASH_LOCK_FRAMES` claimed, because carryover was
+applied before the move rather than after it. And a current tile drawn inside a
+pool was not water, so Nib switched to land gravity and sank through an updraft
+he should have ridden — currents now count as fluid, which is the honest model
+for a game set entirely underwater.
+
+One finding is a level-design constraint rather than a bug: guarantee 2 holds
+for a dash taken within **±6 frames of the apex**, not for one taken straight
+off the ground, because a horizontal dash zeroes vertical velocity and forfeits
+the remaining airtime. Level design may lean on the window, not the instant.
 
 This phase deliberately produces something ugly. Grey boxes, no art, no enemies, no sound.
 If the movement is not fun with nothing in it, no amount of content will save it — and this

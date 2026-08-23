@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Bundle size
+        run: npm run size
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke
+        run: npm run smoke
