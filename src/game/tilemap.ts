@@ -12,6 +12,14 @@ export const Tile = {
   CURRENT_U: 8,
   CURRENT_D: 9,
   SLICK: 10,
+  /**
+   * A crack only Spent Nib fits through. PRD §7.1's small-only passages.
+   *
+   * A rule rather than geometry, and deliberately so: at 16px tiles a 12x14
+   * hitbox fits any one-tile opening, so "small enough to squeeze through"
+   * cannot be expressed by the grid alone. See PRD §16.
+   */
+  CRACK: 11,
 } as const
 export type TileId = (typeof Tile)[keyof typeof Tile]
 
@@ -28,6 +36,7 @@ export const LEGEND: Record<string, TileId> = {
   u: Tile.CURRENT_U,
   d: Tile.CURRENT_D,
   '=': Tile.SLICK,
+  x: Tile.CRACK,
 }
 
 /**

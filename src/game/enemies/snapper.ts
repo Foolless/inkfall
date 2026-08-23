@@ -21,14 +21,14 @@ export function updateSnapper(map: TileMap, e: Enemy, collapsed: ReadonlySet<num
   // Gravity first, so a crab whose platform crumbles away falls off it.
   e.vy = Math.min(e.vy + ENEMIES.GRAVITY, ENEMIES.TERMINAL_FALL)
 
-  if (moveX(map, e, e.vx, collapsed)) turn(e)
-  else if (isGrounded(map, e, collapsed) && wouldWalkOffLedge(map, e, collapsed)) {
+  if (moveX(map, e, e.vx, { collapsed })) turn(e)
+  else if (isGrounded(map, e, { collapsed }) && wouldWalkOffLedge(map, e, collapsed)) {
     turn(e)
     // Step back onto the platform: the probe found the gap before the crab did.
     e.x -= e.vx
   }
 
-  const yres = moveY(map, e, e.vy, collapsed)
+  const yres = moveY(map, e, e.vy, { collapsed })
   if (yres.blocked) e.vy = 0
 
   clampToPatrol(e)

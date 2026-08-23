@@ -27,7 +27,7 @@
  * exist. That is exactly the question PRD §12.8 asks.
  */
 
-import { DISPLAY, TIERS, type TierIndex } from './constants.js'
+import { DISPLAY, SPENT, TIERS, type TierIndex } from './constants.js'
 import { Tile, tileAt, type TileMap } from './tilemap.js'
 import { spawnClam, type Clam } from './hazards.js'
 import type { LoadedLevel } from '../content/levels/format.js'
@@ -106,8 +106,11 @@ function isGroundTile(map: TileMap, tx: number, ty: number): boolean {
   return t === Tile.SOLID || t === Tile.SLICK || t === Tile.ONEWAY || t === Tile.CRUMBLE
 }
 
-function isBlocking(map: TileMap, tx: number, ty: number): boolean {
+function isBlocking(map: TileMap, tx: number, ty: number, small: boolean): boolean {
   const t = tileAt(map, tx, ty)
+  // A crack is solid to everyone but Spent Nib, which is what makes a
+  // small-only shortcut expressible — and assertable.
+  if (t === Tile.CRACK) return !small
   return t === Tile.SOLID || t === Tile.SLICK || t === Tile.CRUMBLE
 }
 
@@ -142,6 +145,7 @@ export function analyseReach(level: LoadedLevel, options: ReachOptions = {}): Re
   const deepJet = options.upgrades?.includes('deepJet') ?? false
   const maxPips = TIERS[tier]!.inkMax + (deepJet ? 1 : 0)
   const clearance = clearanceTiles(tier)
+  const small = tier === SPENT
 
   const clams = level.entities
     .filter((e): e is typeof e & { type: 'clam' } => e.type === 'clam')
@@ -153,7 +157,7 @@ export function analyseReach(level: LoadedLevel, options: ReachOptions = {}): Re
   const open = (tx: number, ty: number): boolean => {
     if (tx < 0 || tx >= map.width || ty < 0 || ty >= map.height) return false
     for (let i = 0; i < clearance; i++) {
-      if (isBlocking(map, tx, ty - i) || isDeadly(map, tx, ty - i)) return false
+      if (isBlocking(map, tx, ty - i, small) || isDeadly(map, tx, ty - i)) return false
       if (isClamShell(tx, ty - i)) return false
     }
     return true

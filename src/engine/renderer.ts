@@ -43,6 +43,7 @@ const COLOURS: Record<TileId, string | null> = {
   [Tile.CURRENT_U]: '#25505c',
   [Tile.CURRENT_D]: '#25505c',
   [Tile.SLICK]: '#4a5f6b',
+  [Tile.CRACK]: '#2c3a30',
 }
 
 export class Renderer {
@@ -157,6 +158,8 @@ export class Renderer {
               ? set.oneway
               : t === Tile.SLICK
                 ? set.slick
+                : t === Tile.CRACK
+                  ? set.crack
                 : isBlocked(w.map, tx, ty - 1)
                   ? set.solidFill
                   : set.solidTop

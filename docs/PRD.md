@@ -332,6 +332,7 @@ Each enemy exists to teach or test one thing. If two enemies test the same thing
 | **Urchin spikes** | all | Static instant death. Always drawn on a contrasting tile so they read at a glance. |
 | **Crush clam** | 1, 3 | Opens 90 frames, slams in 6. Instant death in the mouth; the shell is a platform when closed. |
 | **Collapsing sand** | 1, 4 | Crumbles 24 frames after Nib lands. Respawns 180 frames later. Visible cracks as a timer. |
+| **Crack** | all | A fissure only **Spent** Nib fits through. Solid to Full and Charged. Always optional — a shortcut, a speedrun route or a cache, never the way on. |
 | **Current** | 2, 5 | Directional force zone, drawn with drifting particles — never invisible. **Current tiles count as fluid**: a current inside a pool still floats you rather than silently switching Nib to land gravity. The whole game is underwater, so every current in it is a water current. |
 | **Bubble stream** | 2, 3 | Rising bubbles act as one-frame-of-contact platforms with `−1.2` upward carry. Pop after 1 use. |
 | **Rising magma** | 4 | Room-scale timer. Rises at 0.25 px/f. Instant death. One-way vertical pressure. |
@@ -881,7 +882,8 @@ export const tidepools: LevelDef = {
   chapter: "shallows",        // chapter owns palette, tileset and music
   order: 10,                  // sparse, so levels can be inserted between
   // legend: '.' empty  '#' solid  '-' oneway  '~' water  '^' hazard
-  //         'c' crumble '>' current-right  'S' start  'E' exit  'K' checkpoint
+  //         'c' crumble  '>' current-right  'x' crack (Spent only)
+  //         'S' start  'E' exit  'K' checkpoint
   tiles: [
     "....................................",
     "..........................#####.....",
@@ -1022,17 +1024,21 @@ M1–M8 is the ship. M9 follows.
 | 5 | The name | **INKFALL**, confirmed. No longer a working title. |
 | 6 | Repository | **Done.** Lives at [github.com/Foolless/inkfall](https://github.com/Foolless/inkfall), with the design history preserved. |
 
-### Opened in v1.4 (Phase 2)
+### Resolved in v1.4 (Phase 2)
 
-**A one-tile gap does not exclude Full Nib.** §4.4 and §7.1 rest on Spent Nib fitting through passages Full Nib cannot, and with this document's own numbers that is not true: tiles are 16 px, Full's hitbox is 12×14 and Spent's is 10×10, so *both* fit through a one-tile opening in either axis. The difference between the tiers is real everywhere else — two pips instead of three, a slightly higher jump, 50% longer on collapsing sand — but the geometric one does not exist. World 1 therefore ships with **no small-only passage**, and W5's pearl ② (the only pearl in the game gated on being small) has nothing to stand on yet.
+**A one-tile gap does not exclude Full Nib — resolved with a `CRACK` tile.** §4.4 and §7.1 rest on Spent Nib fitting through passages Full Nib cannot, and with this document's own numbers that is not true: tiles are 16 px, Full's hitbox is 12×14 and Spent's is 10×10, so *both* fit through a one-tile opening in either axis. The difference between the tiers is real everywhere else — two pips instead of three, a slightly higher jump, 50% longer on collapsing sand — but the geometric one does not exist.
 
-Three ways out, in increasing order of cost:
+Three ways out were considered:
 
-1. **Make Full taller than a tile.** A 12×18 hitbox in a 16×24 sprite cell makes one-tile crawl-spaces genuinely Spent-only. It changes every jump arc and every sprite Nib has, so it is a Phase 1 decision being reopened, and the feel-guarantee tests would all need re-running.
-2. **Drop the claim.** Delete small-only passages from §7.1, move W5 ② behind something else, and let the tier difference live entirely in the pip budget. Cheapest, and costs the game one idea.
-3. **Give Spent a verb instead of a size.** A one-tile passage becomes a *squeeze* only Spent can perform — a held-down crouch that Full cannot complete. New mechanic, new art, new tests.
+1. **Make Full taller than a tile.** A 12×18 hitbox in a 16×24 sprite cell makes one-tile crawl-spaces genuinely Spent-only. It changes every jump arc and every sprite Nib has, reopens a Phase 1 decision, and forces a re-run of every feel guarantee.
+2. **Drop the claim**, and let the tier difference live entirely in the pip budget. Cheap, and costs the game an idea.
+3. **Make the passage a tile type.** A `CRACK` is solid to every body except a small one. Legend character `x`.
 
-Recommendation: **(2) until Phase 3**, then revisit with W5 in front of us. `src/game/reach.ts` derives clearance from the hitbox rather than assuming it, so whichever way this goes, the solver starts telling the truth the day the numbers change.
+**Chosen: (3).** It is a rule rather than emergent geometry, and that is the honest trade — the fiction ("a crack too small for a full-sized squid") is intact, the art reads it at a glance, nothing about Phase 1's tuning moves, and the reachability solver can now *assert* that a shortcut is Spent-only rather than take it on trust. W5's pearl ② has something to sit behind, and World 1 carries one: a cache of shells under the Puffer tunnel's floor.
+
+The rule that comes with it, and it is not optional: **a crack is never on the critical path.** A player who is never hit must never meet a wall that only being hit could have opened. `tests/reach.test.ts` proves every campaign level completable at **Full** as well as at Spent, which is what makes that a guarantee rather than an intention.
+
+`src/game/reach.ts` still derives *clearance* from the hitbox rather than assuming it, so if the tier boxes ever do change, the solver notices on its own.
 
 ### Still open
 
@@ -1140,6 +1146,7 @@ export const DISPLAY = {
 | Vertical dash aim is buffered | 6 frames | Sampling only the exact press frame | Playtest read a mistimed horizontal dash as the up-dash not existing at all |
 | Vertical gates are authored against the *diagonal* reach | ~6.3 tiles | The 7.9 a pure vertical dash reaches | A player moving rightward holds Right; punishing that teaches the wrong lesson |
 | Level authoring split | Grid owns geometry, `entities` owns actors, `hints` owns captions | Checkpoints and pickups in both; everything in one list | Found in Phase 2: §12.5 sketched checkpoints as a legend character *and* an array. Two authorities for one fact is how a level ends up with three conches in the grid and two in the list. Terrain markers are positions, so they stay in the grid; anything that moves, ticks or is collected goes in the typed list; a key prompt is a caption on the room and has no box to collide with. |
+| Small-only passages | A `CRACK` tile, solid to all but Spent | Making Full taller than a tile; dropping the idea | Found in Phase 2: with 16px tiles and a 12×14 hitbox, *both* tiers fit a one-tile opening, so the geometry never expressed the design. A tile type keeps the fiction and the art, costs nothing in tuning, and lets the solver assert the shortcut is Spent-only. Never on the critical path, and that is tested at the Full tier. |
 | A1's first gap | 5 tiles | 6 tiles, per the original beat sheet | Found in Phase 2: 6 tiles is dx 7, which is exactly feel guarantee 2 and only holds for an apex-timed dash. The first required action in the game must not need frame-perfect input. |
 | Currents are fluid | A current tile floats you | A separate "dry current" tile type | Found in Phase 1: a current drawn over water replaces the water glyph, so Nib sank through an updraft he should have ridden. The game is underwater; the simple rule is the correct one. |
 | v1 scope | 5 levels, architected for ~50 | Building toward 50 now; ignoring 50 entirely | Five is the deliverable. §12.7 is a set of cheap constraints, not scope — retrofitting stable ids and chapter-owned tilesets later is a rewrite. |
