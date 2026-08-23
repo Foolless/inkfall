@@ -1,4 +1,4 @@
-import { CHARGED_TIER, DISPLAY, SPENT } from '../game/constants.js'
+import { CHARGED_TIER, DISPLAY } from '../game/constants.js'
 import { Tile, tileAt, type TileId } from '../game/tilemap.js'
 import { tierOf } from '../game/player.js'
 import type { World } from '../game/world.js'
@@ -6,6 +6,10 @@ import type { Camera } from './camera.js'
 import { frameFor, paletteFor, type Anim } from './anim.js'
 import { enemyFrame } from './enemy-anim.js'
 import { clamState, isTelegraphing } from '../game/hazards.js'
+import { formatScore, formatTime, type Session } from '../game/state.js'
+import { SHARED } from '../content/palettes.js'
+import { drawText, drawTextRight } from './text.js'
+import { drawGameOver, drawLevelClear, drawPause, drawTitle } from './screens.js'
 import { drawSprite, SpriteCache } from './sprite.js'
 
 const T = DISPLAY.TILE
@@ -51,9 +55,16 @@ export class Renderer {
     this.canvas.style.imageRendering = 'pixelated'
   }
 
-  draw(w: World, cam: Camera, anim: Anim): void {
+  draw(s: Session, cam: Camera, anim: Anim): void {
     const { ctx } = this
     ctx.imageSmoothingEnabled = false
+
+    if (s.screen === 'title') {
+      drawTitle(ctx, s)
+      return
+    }
+
+    const w = s.world
     // Everything below floors its coordinates: sub-pixel state, integer pixels.
     const ox = Math.floor(cam.x)
     const oy = Math.floor(cam.y)
@@ -66,7 +77,11 @@ export class Renderer {
     this.drawPickups(w, ox, oy)
     this.drawEnemies(w, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
-    this.drawHud(w)
+    this.drawHud(s)
+
+    if (s.screen === 'paused') drawPause(ctx)
+    if (s.screen === 'levelClear') drawLevelClear(ctx, s)
+    if (s.screen === 'gameOver') drawGameOver(ctx, s)
   }
 
   private drawTiles(w: World, ox: number, oy: number): void {
@@ -237,27 +252,66 @@ export class Renderer {
     }
   }
 
-  private drawHud(w: World): void {
+  /**
+   * The HUD. PRD §11.2: one 16px strip, and the ink meter is the largest thing
+   * in it because it is what the player has to read mid-air.
+   *
+   * The meter doubles as the health display, which is why the tier costs no
+   * extra real estate — Spent draws its third slot as a broken outline, Charged
+   * hardens all three. The player reads their own health where they are already
+   * looking.
+   */
+  private drawHud(s: Session): void {
     const { ctx } = this
+    const w = s.world
     const p = w.player
     const max = tierOf(p).inkMax
+
+    ctx.fillStyle = 'rgba(5,9,15,0.55)'
+    ctx.fillRect(0, 0, DISPLAY.WIDTH, 16)
+
+    drawText(ctx, `NIBx${s.lives}`, 4, 5, SHARED.UI_TEXT)
+
     for (let i = 0; i < 3; i++) {
-      const x = 6 + i * 9
+      const x = 46 + i * 10
       if (i >= max) {
-        // Spent: the third slot draws as a broken outline. The meter is the
-        // health bar, so tier costs no extra HUD space.
-        ctx.strokeStyle = '#4d565d'
+        // Spent: the third slot is a broken outline, not a missing pip. The
+        // difference matters — one says "you lost something", the other says
+        // "there was never anything here".
+        ctx.strokeStyle = SHARED.UI_DIM
         ctx.lineWidth = 1
-        ctx.strokeRect(x + 0.5, 6.5, 6, 6)
+        ctx.setLineDash([2, 2])
+        ctx.strokeRect(x + 0.5, 4.5, 7, 7)
+        ctx.setLineDash([])
         continue
       }
       const filled = i < p.ink
-      ctx.fillStyle = filled ? (p.tier === CHARGED_TIER ? '#e761ef' : '#00e5cc') : '#2a343b'
-      ctx.fillRect(x, 6, 7, 7)
+      ctx.fillStyle = filled ? (p.tier === CHARGED_TIER ? SHARED.CHARGED_BODY : SHARED.INK_CYAN) : '#2a343b'
+      ctx.fillRect(x, 4, 8, 8)
+      if (p.tier === CHARGED_TIER && filled) {
+        ctx.fillStyle = SHARED.CHARGED_RIM
+        ctx.fillRect(x, 4, 8, 1)
+        ctx.fillRect(x, 4, 1, 8)
+      }
     }
-    if (p.tier === SPENT) {
-      ctx.fillStyle = '#7b9098'
-      ctx.fillRect(6, 16, 15, 1)
+
+    drawText(ctx, `S${String(w.shells).padStart(3, '0')}`, 84, 5, SHARED.SHELL)
+    drawText(ctx, formatScore(w.score + s.score), 118, 5, SHARED.UI_TEXT)
+
+    // Pearls: filled for found, hollow for not. Shape, never colour alone.
+    for (let i = 0; i < 3; i++) {
+      const x = 224 + i * 8
+      ctx.fillStyle = w.pearls[i] ? SHARED.PEARL : SHARED.UI_DIM
+      if (w.pearls[i]) {
+        ctx.fillRect(x, 6, 5, 5)
+      } else {
+        ctx.fillRect(x, 6, 5, 1)
+        ctx.fillRect(x, 10, 5, 1)
+        ctx.fillRect(x, 6, 1, 5)
+        ctx.fillRect(x + 4, 6, 1, 5)
+      }
     }
+
+    drawTextRight(ctx, formatTime(s.levelFrames), DISPLAY.WIDTH - 4, 5, SHARED.UI_TEXT)
   }
 }

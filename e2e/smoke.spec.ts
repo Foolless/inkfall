@@ -15,6 +15,7 @@ test('the grey box loads and runs', async ({ page }) => {
 
   await page.goto('/')
   await expect(page.locator('canvas#game')).toBeVisible()
+  await page.keyboard.press('Space') // past the title, into the grey box
 
   // The canvas must be at the internal resolution, integer-scaled by CSS.
   const size = await page.locator('canvas#game').evaluate((el: HTMLCanvasElement) => ({
@@ -32,6 +33,8 @@ test('the grey box loads and runs', async ({ page }) => {
 
 test('the simulation advances and responds to the keyboard', async ({ page }) => {
   await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
   await page.waitForFunction(() => (window.__inkfall?.frame() ?? 0) > 10)
 
   const before = await page.evaluate(() => window.__inkfall!.frame())
@@ -49,9 +52,45 @@ test('the simulation advances and responds to the keyboard', async ({ page }) =>
 
 test('respawn restores Full — never Spent, never Charged', async ({ page }) => {
   await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
   await page.waitForFunction(() => (window.__inkfall?.frame() ?? 0) > 10)
   await page.evaluate(() => window.__inkfall!.kill())
   expect(await page.evaluate(() => window.__inkfall!.tier())).toBe(1)
+})
+
+/**
+ * The whole shell, driven from the keyboard: title, play, clear, back to the
+ * title. This is the class of bug unit tests structurally cannot catch — a
+ * screen the state machine can reach but that never renders, or a key the
+ * browser swallows before the simulation sees it.
+ */
+test('title to play to level clear and back, without touching the console', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.screen())).toBe('title')
+
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+  expect(await page.evaluate(() => window.__inkfall!.lives())).toBe(3)
+
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'paused')
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+
+  await page.evaluate(() => window.__inkfall!.clear())
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
+
+  await page.waitForTimeout(600)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'title')
+
+  expect(await page.evaluate(() => window.__inkfall!.score())).toBeGreaterThan(0)
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
 })
 
 test('the sprite editor loads', async ({ page }) => {

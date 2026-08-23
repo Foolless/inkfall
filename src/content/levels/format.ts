@@ -72,6 +72,14 @@ export interface LevelDef {
   entities?: readonly EntityDef[]
   /** Boss id, if the level ends in one. A level needs an exit or a boss. */
   boss?: string
+  /**
+   * Par time in seconds. Seconds left on it at the exit pay 50 points each.
+   *
+   * Authored per level rather than derived, because par is a *design* statement
+   * about how fast the room should read, not a measurement of how fast the
+   * developer happens to be at it.
+   */
+  par?: number
 }
 
 export class LevelValidationError extends Error {
@@ -109,6 +117,7 @@ export function loadLevel(def: LevelDef): LoadedLevel {
   if (def.name.trim() === '') fail('name is empty')
   if (def.chapter.trim() === '') fail('chapter is empty')
   if (!Number.isInteger(def.order) || def.order < 0) fail(`order must be a non-negative integer, got ${def.order}`)
+  if (def.par !== undefined && !(def.par > 0)) fail(`par must be a positive number of seconds, got ${def.par}`)
 
   const map = parseTiles(def.tiles)
 

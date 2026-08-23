@@ -15,6 +15,7 @@ export const Act = {
   Run: 1 << 5,
   Dash: 1 << 6,
   Shoot: 1 << 7,
+  Pause: 1 << 8,
 } as const
 export type Action = (typeof Act)[keyof typeof Act]
 
@@ -60,6 +61,8 @@ export const DEFAULT_BINDS: Record<string, Action> = {
   Slash: Act.Dash,
   KeyC: Act.Shoot,
   Period: Act.Shoot,
+  Escape: Act.Pause,
+  Enter: Act.Pause,
 }
 
 /**
