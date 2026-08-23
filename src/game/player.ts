@@ -159,6 +159,8 @@ export interface PlayerStepContext {
   crumbling: Map<number, number>
   /** Solid boxes that are not terrain — closed crush clams, for now. */
   solids?: readonly Box[]
+  /** Named sounds this step wants. Filled, never played, by the simulation. */
+  cues?: string[]
 }
 
 export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFrame): void {
@@ -186,7 +188,11 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   if (isPressed(input, Act.Jump)) p.jumpBuffer = PHYSICS.JUMP_BUFFER_FRAMES
 
   refillInk(p)
+  const wasDashing = p.dashFrames > 0
   tryStartDash(p, input)
+  if (!wasDashing && p.dashFrames > 0) {
+    ctx.cues?.push(p.tier === CHARGED_TIER ? 'chargedDash' : 'dash')
+  }
 
   // Carryover is applied *after* the move, not before it, so the dash delivers
   // exactly DASH_LOCK_FRAMES of full-speed travel rather than one frame fewer.
@@ -195,10 +201,10 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
     p.dashFrames--
     dashEnding = p.dashFrames === 0
   } else if (p.inWater) {
-    swim(p, dir)
+    swim(p, dir, ctx.cues)
   } else {
     walk(p, input, dir, tier)
-    fall(p, input, tier)
+    fall(p, input, tier, ctx.cues)
   }
 
   applyCurrents(map, p)
@@ -285,13 +291,14 @@ function walk(p: Player, input: InputFrame, dir: number, tier: (typeof TIERS)[nu
   p.vx = approach(p.vx, dir * max, accel)
 }
 
-function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number]): void {
+function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?: string[]): void {
   if (p.jumpBuffer > 0 && (p.grounded || p.coyote > 0)) {
     p.vy = tier.jump
     p.grounded = false
     p.jumping = true
     p.jumpBuffer = 0
     p.coyote = 0
+    cues?.push('jump')
   }
   // Variable jump height: releasing early cuts the rise — but only a rise Nib
   // started himself. A stomp bounce is not a jump and is not the player's to
@@ -305,10 +312,11 @@ function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number]): void 
   p.vy = Math.min(p.vy + tier.gravity, PHYSICS.TERMINAL_FALL)
 }
 
-function swim(p: Player, dir: number): void {
+function swim(p: Player, dir: number, cues?: string[]): void {
   if (p.jumpBuffer > 0) {
     p.vy = WATER.SWIM_STROKE
     p.jumpBuffer = 0
+    cues?.push('swim')
   }
   if (dir === 0) p.vx = approach(p.vx, 0, PHYSICS.AIR_DRAG)
   else if (Math.abs(p.vx) > WATER.SWIM_MAX_X && Math.sign(p.vx) === dir) {

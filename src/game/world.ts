@@ -67,6 +67,14 @@ export interface World {
   /** How many enemies the level authored, before any the boss summons. */
   baseEnemies: number
   /**
+   * Sound cues raised this frame, drained by the host.
+   *
+   * The simulation names what happened; it never makes a noise. That keeps
+   * Web Audio out of the replay path entirely — a headless replay raises the
+   * same cues and simply has nobody listening.
+   */
+  cues: string[]
+  /**
    * Reused array for the per-frame list of solid clams.
    *
    * Ugly, and deliberate: PRD §12.6 asks for zero allocations in the update
@@ -134,6 +142,7 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     livesOwed: 0,
     bossDef: level.def.boss ?? '',
     baseEnemies: enemies.length,
+    cues: [],
     solidScratch: [],
   }
 }
@@ -176,6 +185,7 @@ export function bossCameraLock(w: World): Box | null {
 
 export function update(w: World, input: InputFrame): void {
   w.frame++
+  w.cues.length = 0
 
   // Hitstop freezes the whole simulation for a few frames on a stomp or a
   // shrink. The frame counter still advances, so the clock a speedrun is timed
@@ -189,7 +199,7 @@ export function update(w: World, input: InputFrame): void {
   for (const c of w.clams) updateClam(c)
   const solids = clamSolids(w.clams, w.solidScratch)
 
-  const ctx: PlayerStepContext = { map: w.map, collapsed: w.collapsed, crumbling: w.crumbling, solids }
+  const ctx: PlayerStepContext = { map: w.map, collapsed: w.collapsed, crumbling: w.crumbling, solids, cues: w.cues }
   updatePlayer(ctx, w.player, input)
 
   const enemyCtx = { map: w.map, collapsed: w.collapsed, player: w.player }
@@ -300,9 +310,11 @@ function collectPickups(w: World): void {
         w.shells++
         w.livesOwed += livesEarned(before, w.shells)
         w.score += POINTS.SHELL
+        w.cues.push('shell')
         break
       }
       case 'pearl':
+        w.cues.push('pearl')
         // Persistent across runs — the save layer reads this on level clear.
         if (pick.id >= 0) w.pearls[pick.id] = true
         w.score += POINTS.PEARL
@@ -312,6 +324,7 @@ function collectPickups(w: World): void {
       default: {
         // A Core promotes one rung like a Bulb does — but its ceiling is Charged.
         const ceiling: TierIndex = pick.kind === 'inkCore' ? CHARGED_TIER : FULL
+        w.cues.push(pick.kind === 'inkCore' ? 'core' : 'bulb')
         const promoted = promote(w.map, w.player, ceiling, w.collapsed)
         // Collected at a tier you already hold, it refills and pays out instead.
         if (!promoted) w.score += pick.kind === 'inkCore' ? POINTS.CORE_AT_TIER : POINTS.BULB_AT_TIER
@@ -328,6 +341,7 @@ function checkCheckpoints(w: World): void {
     if (!boxesOverlap(w.player, box)) continue
     if (w.checkpoint?.x === box.x && w.checkpoint.y === box.y) continue
     w.checkpoint = { x: e.tx * T + 2, y: e.ty * T + 2 }
+    w.cues.push('checkpoint')
   }
 }
 

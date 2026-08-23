@@ -141,6 +141,32 @@ test('a corrupt save falls back to defaults, keeps a backup, and never clears th
   expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
 })
 
+/**
+ * Audio, as far as a machine can check it: nothing before the gesture, a real
+ * context and the chapter's theme after it, and mute on one key. Whether the
+ * synth sounds *good* is checkpoint 2.7's judgement call, and needs ears.
+ */
+test('audio stays silent until a gesture, then plays the chapter theme', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/?level=w01-tidepools')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.audio().started)).toBe(false)
+
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.audio().started)
+
+  const state = await page.evaluate(() => window.__inkfall!.audio())
+  expect(state.playing).toBe('world1')
+  expect(state.muted).toBe(false)
+
+  await page.keyboard.press('KeyM')
+  await page.waitForFunction(() => window.__inkfall!.audio().muted)
+
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
 test('the sprite editor loads', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))

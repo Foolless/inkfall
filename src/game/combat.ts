@@ -36,6 +36,8 @@ export interface CombatState {
   hitstop: number
   boss: Boss | null
   rocks: Rock[]
+  /** Named sounds for this frame. The simulation never makes a noise itself. */
+  cues: string[]
 }
 
 export function resolveCombat(w: CombatState, jumpHeld: boolean): void {
@@ -109,6 +111,7 @@ function resolveBoss(w: CombatState, approach: Approach, stomped: boolean, jumpH
       p.jumping = false
       p.iframes = Math.max(p.iframes, RULES.HURT_IFRAMES / 2)
       w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_SHRINK)
+      w.cues.push('bossHit')
       if (killed) w.score += POINTS.BOSS
     }
     return
@@ -151,6 +154,7 @@ function stomp(w: CombatState, e: Enemy, jumpHeld: boolean): void {
   // Not a jump, so the variable-height cut must leave it alone.
   p.jumping = false
   w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_FRAMES)
+  w.cues.push('stomp')
 }
 
 /**
@@ -172,6 +176,7 @@ function takeHit(w: CombatState, source: Box): void {
   if (!landed) return
 
   w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_SHRINK)
+  w.cues.push(p.alive ? 'shrink' : 'death')
   if (p.alive) stunNearby(w, p)
 }
 

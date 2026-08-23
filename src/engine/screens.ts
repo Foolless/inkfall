@@ -46,7 +46,7 @@ export function drawTitle(ctx: CanvasRenderingContext2D, s: Session): void {
   if (pulse(s.uiFrames)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, 116, SHARED.UI_TEXT)
 
   drawTextCentred(ctx, 'ARROWS MOVE   SPACE JUMP   X INK DASH', W / 2, 148, SHARED.UI_DIM)
-  drawTextCentred(ctx, 'SHIFT RUN   ESC PAUSE', W / 2, 158, SHARED.UI_DIM)
+  drawTextCentred(ctx, 'SHIFT RUN   ESC PAUSE   M MUTE', W / 2, 158, SHARED.UI_DIM)
 }
 
 export function drawPause(ctx: CanvasRenderingContext2D): void {

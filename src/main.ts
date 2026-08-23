@@ -10,6 +10,9 @@ import { bossCameraLock } from './game/world.js'
 import { createSession, updateSession } from './game/state.js'
 import { kill } from './game/player.js'
 import { loadSave, recordClear, recordHighScore, writeSave, type SaveData } from './engine/save.js'
+import { Audio, type Cue } from './engine/audio/sfx.js'
+import { trackFor } from './content/music/world1.js'
+import { chapterOf } from './content/chapters.js'
 
 const canvas = document.getElementById('game')
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing')
@@ -29,6 +32,23 @@ const requested = params.get('level')
 const level = requested === null ? greybox : levelDef(requested)
 
 const session = createSession(level)
+const audio = new Audio()
+
+/**
+ * Audio cannot start until the player has touched something (PRD §10.4), which
+ * is exactly what the title screen's "PRESS SPACE" is for. Everything before
+ * that point queues nothing and simply makes no sound.
+ */
+function startAudio(): void {
+  if (audio.started) return
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctor) return
+  audio.start(new Ctor())
+  const track = trackFor(chapterOf(level.chapter).music)
+  if (track) audio.playMusic(track)
+}
+window.addEventListener('keydown', startAudio, { once: true })
+window.addEventListener('pointerdown', startAudio, { once: true })
 
 // Progress is loaded once at boot. `writable` is false when the file was
 // unreadable or came from a newer build — in both cases the game is playable
@@ -67,6 +87,10 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault()
     debug.toggle()
   }
+  if (e.code === 'KeyM') {
+    e.preventDefault()
+    audio.toggleMute()
+  }
   if (e.code === 'KeyR' && session.screen === 'playing') {
     e.preventDefault()
     session.world = createSession(level).world
@@ -82,7 +106,10 @@ fit()
 startLoop({
   update: () => {
     const input = keyboard.snapshot()
+    const screenBefore = session.screen
     updateSession(session, input)
+    for (const cue of session.world.cues) audio.play(cue as Cue)
+    if (session.screen !== screenBefore) audio.play('menu')
     if (session.pendingSave) {
       session.pendingSave = false
       persist()
@@ -93,6 +120,9 @@ startLoop({
   },
   render: (frameTimeMs) => {
     debug.sample(frameTimeMs)
+    // Scheduled against the audio clock, not the frame: a dropped frame nobody
+    // sees is a stutter everybody hears.
+    audio.update()
     updateCamera(camera, session.world.player, session.world.map, bossCameraLock(session.world))
     renderer.draw(session, camera, anim)
     debug.draw(renderer.ctx, session.world, camera)
@@ -115,6 +145,7 @@ declare global {
       kill: () => void
       clear: () => void
       warp: (tx: number) => void
+      audio: () => { started: boolean; playing: string | null; muted: boolean }
     }
   }
 }
@@ -145,4 +176,5 @@ window.__inkfall = {
     session.world.player.vy = 0
   },
   pearls: () => save.progress.pearls[level.id]?.filter(Boolean).length ?? 0,
+  audio: () => ({ started: audio.started, playing: audio.nowPlaying, muted: audio.muted }),
 }
