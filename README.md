@@ -5,7 +5,6 @@ A NES-difficulty 2D platformer about a squid descending from a sunlit tide pool 
 **Status:** design phase — documentation only, no code yet. Start with the PRD.
 
 📄 **[docs/PRD.md](docs/PRD.md)** — the full product requirements document
-🚚 **[MIGRATION.md](MIGRATION.md)** — how to lift this into its own repository
 
 ## The short version
 
@@ -46,9 +45,8 @@ Nothing to build yet. Milestone M1 in the PRD creates the project skeleton; M2 i
 vertical slice, and it is an explicit go/no-go gate — if the ink dash isn't fun in an empty
 grey box, the design stops there before any content is authored.
 
-## About this directory
+## Contributing
 
-This is a standalone project with **no coupling** to the repository that currently surrounds
-it — separate build, separate dependencies, separate deploy. It lives here only because that
-is where the working branch was. See [MIGRATION.md](MIGRATION.md), and delete this section
-once the move is done.
+Design decisions live in the PRD's decisions log (Appendix C), including the ones that were
+considered and rejected. If a change contradicts something there, update the log in the same
+commit — a decision that quietly reverses without a record is how a design drifts.

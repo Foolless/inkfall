@@ -1007,7 +1007,7 @@ M1–M8 is the ship. M9 follows.
 | 3 | Free replay of cleared levels? | **Yes, free replay from the world map** — required, since five pearls are gated behind later-world upgrades. |
 | 4 | Does the run timer include boss fights? | **Yes.** The clock does not stop at the boss door or for the intro animation (§8.4). |
 | 5 | The name | **INKFALL**, confirmed. No longer a working title. |
-| 6 | Repository | Moving to its own repo, created by the owner. `MIGRATION.md` has the steps. |
+| 6 | Repository | **Done.** Lives at [github.com/Foolless/inkfall](https://github.com/Foolless/inkfall), with the design history preserved. |
 
 ### Still open
 
