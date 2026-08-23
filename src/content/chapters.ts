@@ -18,6 +18,11 @@ export interface Chapter {
   name: string
   /** The world's sub-palette, drawn from the master palette. PRD §9.1. */
   palette: readonly string[]
+  /**
+   * Tileset id. Undefined means the grey box, which is what the proving ground
+   * and the test fixtures want — Phase 1's drabness is a feature there.
+   */
+  tileset?: string
   /** Track id for the tracker. One theme per chapter, not per level. */
   music: string
 }
@@ -27,6 +32,7 @@ export const CHAPTERS: Record<string, Chapter> = {
     id: 'shallows',
     name: 'The Tide Pools',
     palette: Object.values(SHALLOWS),
+    tileset: 'shallows',
     music: 'world1',
   },
   kelp: {

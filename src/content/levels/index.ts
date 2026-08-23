@@ -9,9 +9,10 @@
 
 import { chapterOf } from '../chapters.js'
 import { greybox } from './greybox.js'
+import { tidepools } from './w01-tidepools.js'
 import { loadLevel, type LevelDef, type LoadedLevel } from './format.js'
 
-const ALL: readonly LevelDef[] = [greybox]
+const ALL: readonly LevelDef[] = [greybox, tidepools]
 
 function buildRegistry(defs: readonly LevelDef[]): Map<string, LevelDef> {
   const byId = new Map<string, LevelDef>()
@@ -53,4 +54,4 @@ export function campaign(): readonly LevelDef[] {
   return [...REGISTRY.values()].filter((d) => d.chapter !== 'test').sort((a, b) => a.order - b.order)
 }
 
-export { greybox }
+export { greybox, tidepools }

@@ -113,6 +113,7 @@ declare global {
       reset: () => void
       kill: () => void
       clear: () => void
+      warp: (tx: number) => void
     }
   }
 }
@@ -134,6 +135,13 @@ window.__inkfall = {
   },
   clear: () => {
     session.world.cleared = true
+  },
+  // Teleport, for looking at a room without playing to it. Debug only.
+  warp: (tx: number) => {
+    session.world.player.x = tx * 16
+    session.world.player.y = 18 * 16 - session.world.player.h
+    session.world.player.vx = 0
+    session.world.player.vy = 0
   },
   pearls: () => save.progress.pearls[level.id]?.filter(Boolean).length ?? 0,
 }

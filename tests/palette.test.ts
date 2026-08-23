@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { isMasterColour, MASTER, NIB_CHARGED_PALETTE, NIB_PALETTE, NIB_SPENT_PALETTE } from '../src/content/palettes.js'
 import { NIB_FRAMES } from '../src/content/sprites/nib.js'
 import { ENEMY_FRAMES } from '../src/content/sprites/enemies.js'
+import { PICKUP_FRAMES } from '../src/content/sprites/pickups.js'
+import { SHALLOWS_FRAMES } from '../src/content/tilesets/shallows.js'
 import { decode } from '../src/content/sprites/format.js'
 
 /**
@@ -26,7 +28,7 @@ describe('the master palette', () => {
   })
 })
 
-const ALL_FRAMES = [...NIB_FRAMES, ...ENEMY_FRAMES]
+const ALL_FRAMES = [...NIB_FRAMES, ...ENEMY_FRAMES, ...PICKUP_FRAMES, ...SHALLOWS_FRAMES]
 
 describe('sprite palettes', () => {
   test('every frame uses at most 3 colours plus transparent', () => {
@@ -52,6 +54,35 @@ describe('sprite palettes', () => {
   test('the three tier palettes are the same length, so any frame reads under any of them', () => {
     expect(NIB_SPENT_PALETTE.length).toBe(NIB_PALETTE.length)
     expect(NIB_CHARGED_PALETTE.length).toBe(NIB_PALETTE.length)
+  })
+})
+
+describe('pickup frames', () => {
+  /**
+   * A Bulb and a Core are a decision the player makes mid-air, so they must not
+   * merely be different colours — PRD §13 asks every meaningful difference to
+   * survive greyscale.
+   */
+  test('every pickup has its own silhouette', () => {
+    const shapes = PICKUP_FRAMES.map((f) => `${f.w}x${f.h}:` + decode(f).map((p) => (p === 0 ? 0 : 1)).join(''))
+    expect(new Set(shapes).size).toBe(shapes.length)
+  })
+})
+
+describe('tileset frames', () => {
+  test('every tile cel fills a whole 16x16 cell, except the one-way ledge', () => {
+    for (const f of SHALLOWS_FRAMES) {
+      expect([f.w, f.h], f.name).toEqual([16, 16])
+      const opaque = decode(f).filter((p) => p !== 0).length
+      const wanted = f.name.includes('Oneway') || f.name.includes('Urchin') ? 16 : 256
+      expect(opaque, `${f.name} covers ${opaque} pixels`).toBeGreaterThanOrEqual(wanted)
+    }
+  })
+
+  test('the capped and filled sand cels are different, so an edge reads as an edge', () => {
+    const top = SHALLOWS_FRAMES.find((f) => f.name === 'sandTop')!
+    const fill = SHALLOWS_FRAMES.find((f) => f.name === 'sandFill')!
+    expect(top.data).not.toBe(fill.data)
   })
 })
 

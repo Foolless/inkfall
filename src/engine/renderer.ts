@@ -10,9 +10,18 @@ import { formatScore, formatTime, type Session } from '../game/state.js'
 import { SHARED } from '../content/palettes.js'
 import { drawText, drawTextRight } from './text.js'
 import { drawGameOver, drawLevelClear, drawPause, drawTitle } from './screens.js'
+import { chapterOf } from '../content/chapters.js'
+import { tilesetOf, type Tileset } from '../content/tilesets/index.js'
+import { PICKUP_SPRITES } from '../content/sprites/pickups.js'
 import { drawSprite, SpriteCache } from './sprite.js'
 
 const T = DISPLAY.TILE
+
+/** True when the tile sits behind another solid, so it needs no sunlit cap. */
+function isBlocked(map: World['map'], tx: number, ty: number): boolean {
+  const t = tileAt(map, tx, ty)
+  return t === Tile.SOLID || t === Tile.SLICK || t === Tile.CRUMBLE
+}
 
 /**
  * Grey box palette. Deliberately drab: Phase 1 is about whether the movement is
@@ -68,11 +77,13 @@ export class Renderer {
     // Everything below floors its coordinates: sub-pixel state, integer pixels.
     const ox = Math.floor(cam.x)
     const oy = Math.floor(cam.y)
+    const set = tilesetOf(chapterOf(s.level.chapter).tileset)
 
-    ctx.fillStyle = '#0b1116'
+    ctx.fillStyle = set?.sky ?? '#0b1116'
     ctx.fillRect(0, 0, DISPLAY.WIDTH, DISPLAY.HEIGHT)
 
-    this.drawTiles(w, ox, oy)
+    if (set) this.drawTileset(w, ox, oy, set)
+    else this.drawTiles(w, ox, oy)
     this.drawClams(w, ox, oy)
     this.drawPickups(w, ox, oy)
     this.drawEnemies(w, ox, oy)
@@ -82,6 +93,70 @@ export class Renderer {
     if (s.screen === 'paused') drawPause(ctx)
     if (s.screen === 'levelClear') drawLevelClear(ctx, s)
     if (s.screen === 'gameOver') drawGameOver(ctx, s)
+  }
+
+  /**
+   * Draw a chapter's tileset.
+   *
+   * Solids pick their cel from what is above them, so a designer authors a
+   * grid of '#' and gets sunlit tops and shaded fill without ever thinking
+   * about edges. Water is painted rather than blitted because it is
+   * translucent, and the nibble format has no alpha to spare.
+   */
+  private drawTileset(w: World, ox: number, oy: number, set: Tileset): void {
+    const { ctx } = this
+    const x0 = Math.floor(ox / T)
+    const x1 = Math.ceil((ox + DISPLAY.WIDTH) / T)
+    const y0 = Math.floor(oy / T)
+    const y1 = Math.ceil((oy + DISPLAY.HEIGHT) / T)
+
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const t = tileAt(w.map, tx, ty)
+        const px = tx * T - ox
+        const py = ty * T - oy
+        const index = ty * w.map.width + tx
+
+        if (t === Tile.WATER || (t >= Tile.CURRENT_R && t <= Tile.CURRENT_D)) {
+          ctx.fillStyle = set.water.body
+          ctx.fillRect(px, py, T, T)
+          // A surface line wherever the water stops, so a pool has an edge.
+          const above = tileAt(w.map, tx, ty - 1)
+          if (above !== Tile.WATER && !(above >= Tile.CURRENT_R && above <= Tile.CURRENT_D)) {
+            ctx.fillStyle = set.water.surface
+            ctx.fillRect(px, py, T, 1)
+            ctx.fillRect(px + ((w.frame >> 2) % T), py + 1, 3, 1)
+          }
+          if (t >= Tile.CURRENT_R && t <= Tile.CURRENT_D) this.drawCurrent(t, px, py, w.frame)
+          continue
+        }
+
+        if (t === Tile.EMPTY) continue
+
+        if (t === Tile.CRUMBLE) {
+          if (w.collapsed.has(index)) continue
+          drawSprite(ctx, this.sprites.get(set.crumble), px, py)
+          // Counting down: flash, so the 24 frames of footing are readable.
+          if (w.crumbling.has(index) && (w.frame >> 2) % 2 === 0) {
+            ctx.fillStyle = 'rgba(255,240,210,0.4)'
+            ctx.fillRect(px, py, T, T)
+          }
+          continue
+        }
+
+        const cel =
+          t === Tile.HAZARD
+            ? set.hazard
+            : t === Tile.ONEWAY
+              ? set.oneway
+              : t === Tile.SLICK
+                ? set.slick
+                : isBlocked(w.map, tx, ty - 1)
+                  ? set.solidFill
+                  : set.solidTop
+        drawSprite(ctx, this.sprites.get(cel), px, py)
+      }
+    }
   }
 
   private drawTiles(w: World, ox: number, oy: number): void {
@@ -146,15 +221,17 @@ export class Renderer {
     }
   }
 
+  /** Pickups bob on a slow cycle, which is most of what makes them read as
+   *  "take me" rather than "scenery". */
   private drawPickups(w: World, ox: number, oy: number): void {
-    const { ctx } = this
     for (const p of w.pickups) {
       if (p.taken) continue
-      const pulse = ((w.frame >> 3) % 2) - 0.5
-      ctx.fillStyle = p.kind === 'inkCore' ? '#0d0d14' : '#7fe8d8'
-      ctx.fillRect(Math.floor(p.x - ox), Math.floor(p.y - oy + pulse), p.w, p.h)
-      ctx.fillStyle = p.kind === 'inkCore' ? '#e761ef' : '#d6fff6'
-      ctx.fillRect(Math.floor(p.x - ox + 2), Math.floor(p.y - oy - 1 + pulse), p.w - 4, 2)
+      const frame = PICKUP_SPRITES[p.kind]
+      if (!frame) continue
+      const bob = ((w.frame >> 3) % 2) - 0.5
+      const x = p.x - ox + (p.w - frame.w) / 2
+      const y = p.y - oy + (p.h - frame.h) / 2 + bob
+      drawSprite(this.ctx, this.sprites.get(frame), x, y)
     }
   }
 
@@ -183,7 +260,7 @@ export class Renderer {
 
       // Open: two jaws with a gap between them, and teeth so the gap reads as a
       // mouth rather than a doorway.
-      const gape = state === 'slamming' ? 2 : c.h - 5
+      const gape = state === 'slamming' ? 3 : c.h - 8
       ctx.fillStyle = '#d6bd8f'
       ctx.fillRect(x, y, c.w, c.h - 4 - gape)
       ctx.fillStyle = '#e8825a'
