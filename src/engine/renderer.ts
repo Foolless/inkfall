@@ -62,6 +62,7 @@ export class Renderer {
     this.drawTiles(w, ox, oy)
     this.drawPickups(w, ox, oy)
     this.drawPlayer(w, ox, oy)
+    this.drawHints(w, ox, oy)
     this.drawHud(w)
   }
 
@@ -136,6 +137,30 @@ export class Renderer {
       ctx.fillRect(Math.floor(p.x - ox), Math.floor(p.y - oy + pulse), p.w, p.h)
       ctx.fillStyle = p.kind === 'inkCore' ? '#e761ef' : '#d6fff6'
       ctx.fillRect(Math.floor(p.x - ox + 2), Math.floor(p.y - oy - 1 + pulse), p.w - 4, 2)
+    }
+  }
+
+  /**
+   * One-time key prompts, drawn near the geometry that needs them.
+   *
+   * The only text the game shows during play. Small, close to Nib, gone after
+   * three seconds, never repeated.
+   */
+  private drawHints(w: World, ox: number, oy: number): void {
+    const { ctx } = this
+    for (const hint of w.hints) {
+      if (hint.frames <= 0) continue
+      const x = Math.floor(hint.tx * T - ox)
+      const y = Math.floor(hint.ty * T - oy)
+      ctx.font = '7px monospace'
+      const width = ctx.measureText(hint.text).width + 8
+      // Fade out over the last half-second rather than vanishing mid-read.
+      ctx.globalAlpha = Math.min(1, hint.frames / 30)
+      ctx.fillStyle = 'rgba(5,9,15,0.85)'
+      ctx.fillRect(x - 4, y - 8, width, 11)
+      ctx.fillStyle = '#00e5cc'
+      ctx.fillText(hint.text, x, y)
+      ctx.globalAlpha = 1
     }
   }
 

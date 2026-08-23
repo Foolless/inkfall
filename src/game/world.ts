@@ -24,6 +24,7 @@ export interface World {
   spawn: { x: number; y: number }
   checkpoint: { x: number; y: number } | null
   exit: Box | null
+  hints: Hint[]
   frame: number
   cleared: boolean
   respawnTimer: number
@@ -35,7 +36,32 @@ export interface LevelDef {
   chapter: string
   order: number
   tiles: readonly string[]
+  hints?: readonly HintDef[]
 }
+
+/**
+ * A one-time key prompt, shown on first approach and never again.
+ *
+ * The PRD allows exactly this and nothing more: no tutorial screens, no text
+ * boxes, everything else taught by level geometry. Gate 1 showed the dash reads
+ * as horizontal-only, so the one prompt worth spending is the up-dash.
+ */
+export interface HintDef {
+  tx: number
+  ty: number
+  text: string
+  /** Tiles from the anchor at which the prompt triggers. */
+  radius?: number
+}
+
+export interface Hint extends HintDef {
+  radius: number
+  /** Frames left on screen; -1 once it has been shown and expired. */
+  frames: number
+  spent: boolean
+}
+
+export const HINT_FRAMES = 180
 
 export function createWorld(def: LevelDef): World {
   const map = parseTiles(def.tiles)
@@ -64,6 +90,7 @@ export function createWorld(def: LevelDef): World {
     spawn,
     checkpoint: null,
     exit: exitMark ? { x: exitMark.tx * T, y: exitMark.ty * T, w: T, h: T } : null,
+    hints: (def.hints ?? []).map((h) => ({ ...h, radius: h.radius ?? 5, frames: 0, spent: false })),
     frame: 0,
     cleared: false,
     respawnTimer: 0,
@@ -80,6 +107,7 @@ export function update(w: World, input: InputFrame): void {
 
   collectPickups(w)
   checkCheckpoints(w)
+  tickHints(w)
 
   if (w.exit && !w.cleared && boxesOverlap(w.player, w.exit)) w.cleared = true
 
@@ -106,6 +134,21 @@ function tickCrumble(w: World): void {
     } else {
       w.respawning.set(tile, frames - 1)
     }
+  }
+}
+
+function tickHints(w: World): void {
+  const cx = w.player.x + w.player.w / 2
+  const cy = w.player.y + w.player.h / 2
+  for (const hint of w.hints) {
+    if (hint.frames > 0) {
+      hint.frames--
+      if (hint.frames === 0) hint.spent = true
+      continue
+    }
+    if (hint.spent) continue
+    const near = Math.abs(cx - (hint.tx * T + T / 2)) <= hint.radius * T && Math.abs(cy - (hint.ty * T + T / 2)) <= hint.radius * T
+    if (near) hint.frames = HINT_FRAMES
   }
 }
 

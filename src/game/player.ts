@@ -35,6 +35,9 @@ export interface Player extends Box {
   alive: boolean
   /** Frames left on the ink cloud that stuns nearby enemies after a hit. */
   stunCloud: number
+  /** Last vertical direction pressed, and how long it stays live for aiming. */
+  aimY: number
+  aimYFrames: number
   deaths: number
 }
 
@@ -64,6 +67,8 @@ export function createPlayer(x: number, y: number): Player {
     inWater: false,
     alive: true,
     stunCloud: 0,
+    aimY: 0,
+    aimYFrames: 0,
     deaths: 0,
   }
 }
@@ -163,8 +168,17 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
 
   if (isPressed(input, Act.Jump)) p.jumpBuffer = PHYSICS.JUMP_BUFFER_FRAMES
 
+  const heldY = (isHeld(input, Act.Down) ? 1 : 0) - (isHeld(input, Act.Up) ? 1 : 0)
+  if (heldY !== 0) {
+    p.aimY = heldY
+    p.aimYFrames = INK.DASH_DIR_BUFFER
+  }
+
   refillInk(p)
   tryStartDash(p, input)
+  // Decremented after the dash check, so DASH_DIR_BUFFER frames of grace means
+  // exactly that many rather than one fewer.
+  if (heldY === 0 && p.aimYFrames > 0) p.aimYFrames--
 
   // Carryover is applied *after* the move, not before it, so the dash delivers
   // exactly DASH_LOCK_FRAMES of full-speed travel rather than one frame fewer.
@@ -226,7 +240,10 @@ function tryStartDash(p: Player, input: InputFrame): void {
 
   let dx = (isHeld(input, Act.Right) ? 1 : 0) - (isHeld(input, Act.Left) ? 1 : 0)
   let dy = (isHeld(input, Act.Down) ? 1 : 0) - (isHeld(input, Act.Up) ? 1 : 0)
-  if (dx === 0 && dy === 0) dx = p.facing // no direction held: dash where you face
+  // A vertical direction released a few frames ago still aims the dash, so a
+  // near-simultaneous Up+X reliably goes up rather than sideways.
+  if (dy === 0 && p.aimYFrames > 0) dy = p.aimY
+  if (dx === 0 && dy === 0) dx = p.facing // nothing at all: dash where you face
 
   const len = Math.hypot(dx, dy)
   dx /= len

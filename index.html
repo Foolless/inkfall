@@ -9,7 +9,8 @@
       html, body { margin: 0; height: 100%; background: #05090f; overflow: hidden; }
       body { display: grid; place-items: center; font-family: ui-monospace, monospace; color: #69808a; }
       canvas { display: block; image-rendering: pixelated; background: #0b1116; }
-      #help { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: .06em; }
+      #help { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: .06em; line-height: 1.9; padding: 0 16px; }
+      #help b { color: #00e5cc; font-weight: 500; }
       kbd { color: #9cb0b8; border: 1px solid #1d2b36; border-bottom-width: 2px; border-radius: 3px; padding: 1px 5px; }
     </style>
   </head>
@@ -17,7 +18,9 @@
     <canvas id="game" aria-label="INKFALL grey box"></canvas>
     <p id="help">
       <kbd>← →</kbd> move &nbsp; <kbd>Space</kbd> jump &nbsp; <kbd>Shift</kbd> run &nbsp;
-      <kbd>X</kbd> ink dash &nbsp; <kbd>R</kbd> restart &nbsp; <kbd>F1</kbd> debug
+      <kbd>X</kbd> ink dash &mdash; <b>hold a direction to aim it</b>, including
+      <kbd>↑</kbd> to dash upward and <kbd>↑</kbd>+<kbd>→</kbd> for diagonals
+      &nbsp; <kbd>R</kbd> restart &nbsp; <kbd>F1</kbd> debug
     </p>
     <script type="module" src="/src/main.ts"></script>
   </body>
