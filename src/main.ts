@@ -6,6 +6,7 @@ import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
 import { greybox } from './content/levels/greybox.js'
 import { levelDef } from './content/levels/index.js'
+import { bossCameraLock } from './game/world.js'
 import { createSession, updateSession } from './game/state.js'
 import { kill } from './game/player.js'
 import { loadSave, recordClear, recordHighScore, writeSave, type SaveData } from './engine/save.js'
@@ -92,7 +93,7 @@ startLoop({
   },
   render: (frameTimeMs) => {
     debug.sample(frameTimeMs)
-    updateCamera(camera, session.world.player, session.world.map)
+    updateCamera(camera, session.world.player, session.world.map, bossCameraLock(session.world))
     renderer.draw(session, camera, anim)
     debug.draw(renderer.ctx, session.world, camera)
   },

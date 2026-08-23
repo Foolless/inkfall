@@ -14,12 +14,13 @@
  * must resolve in the player's favour.
  */
 
-import { CHARGED_TIER, DISPLAY, ENEMIES, INK, PHYSICS, RULES } from './constants.js'
+import { BOSS, CHARGED_TIER, DISPLAY, ENEMIES, INK, PHYSICS, RULES } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
 import { canStomp, hurtBox, stompBox, type Enemy } from './enemies/index.js'
 import { hurt, tierOf, type Player } from './player.js'
 import { POINTS, stompValue } from './score.js'
 import type { TileMap } from './tilemap.js'
+import { hitHermitKing, isVulnerable, type Boss, type Rock } from './bosses/index.js'
 
 const T = DISPLAY.TILE
 
@@ -33,6 +34,8 @@ export interface CombatState {
   score: number
   /** Frames the whole simulation is frozen for. Juice, but stateful juice. */
   hitstop: number
+  boss: Boss | null
+  rocks: Rock[]
 }
 
 export function resolveCombat(w: CombatState, jumpHeld: boolean): void {
@@ -71,6 +74,47 @@ export function resolveCombat(w: CombatState, jumpHeld: boolean): void {
 
     takeHit(w, e)
   }
+
+  resolveBoss(w, approach, stomped, jumpHeld)
+}
+
+/**
+ * The King, and the rocks he throws.
+ *
+ * The only thing that can be hit is the soft back he leaves exposed after a
+ * bonk. Every other part of him, in every other state, costs a tier — and the
+ * rocks cost a tier too, because they are enemy projectiles rather than
+ * geometry (PRD §6.2).
+ */
+function resolveBoss(w: CombatState, approach: Approach, stomped: boolean, jumpHeld: boolean): void {
+  const p = w.player
+  const boss = w.boss
+
+  for (const r of w.rocks) {
+    if (!r.alive || !boxesOverlap(p, r)) continue
+    r.alive = false
+    takeHit(w, r)
+  }
+
+  if (!p.alive || !boss || boss.state === 'dead' || boss.state === 'dying') return
+  if (!boxesOverlap(p, boss)) return
+
+  if (isVulnerable(boss) && (approach.descending || stomped)) {
+    const killed = boss.hits + 1 >= BOSS.HERMIT_HITS
+    if (hitHermitKing(boss)) {
+      w.score += POINTS.BOSS_HIT
+      p.ink = Math.min(p.ink + INK.STOMP_REFUND, tierOf(p).inkMax)
+      p.vy = jumpHeld ? PHYSICS.STOMP_BOUNCE_HELD : PHYSICS.STOMP_BOUNCE
+      p.grounded = false
+      p.jumping = false
+      p.iframes = Math.max(p.iframes, RULES.HURT_IFRAMES / 2)
+      w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_SHRINK)
+      if (killed) w.score += POINTS.BOSS
+    }
+    return
+  }
+
+  takeHit(w, boss)
 }
 
 export interface Approach {
@@ -122,9 +166,9 @@ function chargedKill(w: CombatState, e: Enemy): void {
   w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_FRAMES)
 }
 
-function takeHit(w: CombatState, e: Enemy): void {
+function takeHit(w: CombatState, source: Box): void {
   const p = w.player
-  const landed = hurt(w.map, p, e.x + e.w / 2, w.collapsed)
+  const landed = hurt(w.map, p, source.x + source.w / 2, w.collapsed)
   if (!landed) return
 
   w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_SHRINK)

@@ -1,13 +1,15 @@
 import { Act, isHeld, type InputFrame } from '../engine/input.js'
 import { CHARGED_TIER, DISPLAY, FULL, RULES, type TierIndex } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
-import { Tile, type TileMap } from './tilemap.js'
+import { Tile, tileAt, type TileMap } from './tilemap.js'
 import { loadLevel, type LevelDef, type LoadedLevel } from '../content/levels/format.js'
 import { createPlayer, promote, setTier, updatePlayer, type Player, type PlayerStepContext } from './player.js'
 import { isEnemyKind, spawnEnemy, updateEnemy, type Enemy, type EnemyKind } from './enemies/index.js'
 import { resolveCombat } from './combat.js'
 import { livesEarned, POINTS } from './score.js'
 import { checkClams, clamSolids, spawnClam, updateClam, type Clam } from './hazards.js'
+import { spawnBoss, updateBoss, updateRocks, type Boss, type Rock } from './bosses/index.js'
+import { BOSS } from './constants.js'
 
 const T = DISPLAY.TILE
 
@@ -26,6 +28,17 @@ export interface World {
   pickups: Pickup[]
   enemies: Enemy[]
   clams: Clam[]
+  boss: Boss | null
+  rocks: Rock[]
+  /**
+   * The boss bowl: exactly one screen of the level's right-hand end.
+   *
+   * Null until the level declares a boss. Crossing into it starts the fight and
+   * closes the way back — a soft wall rather than a gate sprite, because the
+   * alternative is a King who charges somewhere the camera is not.
+   */
+  arena: Box | null
+  bossActive: boolean
   /** Tile indices of crumble tiles that have fallen away. */
   collapsed: Set<number>
   /** Tile index -> frames of standing left before collapse. */
@@ -49,6 +62,10 @@ export interface World {
   hitstop: number
   /** Extra lives the shell counter has earned but not yet been credited. */
   livesOwed: number
+  /** The boss id this level declares, so a restart can respawn him. */
+  bossDef: string
+  /** How many enemies the level authored, before any the boss summons. */
+  baseEnemies: number
   /**
    * Reused array for the per-frame list of solid clams.
    *
@@ -88,12 +105,18 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
 
   const clams = level.entities.filter((e): e is typeof e & { type: 'clam' } => e.type === 'clam').map(spawnClam)
 
+  const arena: Box | null = level.def.boss === undefined ? null : arenaBox(map)
+
   return {
     map,
     player: createPlayer(spawn.x, spawn.y),
     pickups,
     enemies,
     clams,
+    boss: null,
+    rocks: [],
+    arena,
+    bossActive: false,
     collapsed: new Set(),
     crumbling: new Map(),
     respawning: new Map(),
@@ -109,8 +132,46 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     chain: 0,
     hitstop: 0,
     livesOwed: 0,
+    bossDef: level.def.boss ?? '',
+    baseEnemies: enemies.length,
     solidScratch: [],
   }
+}
+
+/**
+ * The bowl: one screen wide, one screen tall, sitting on the arena's own floor.
+ *
+ * Anchored to the floor rather than to the map, because a level's grid is
+ * taller than a screen and "the bottom of the map" is somewhere underground.
+ * Getting this wrong spawns the King inside the sand and points the locked
+ * camera at bedrock — which is exactly what it did first time.
+ */
+function arenaBox(map: TileMap): Box {
+  const x = (map.width - BOSS.ARENA_TILES) * T
+  const probeColumn = Math.floor(x / T) + 2
+
+  // Scanned upward from the bedrock, not downward from the sky: a platform
+  // hanging over the bowl is not its floor, and a downward scan happily
+  // reported one as such.
+  let ty = map.height - 1
+  while (ty >= 0 && tileAt(map, probeColumn, ty) === Tile.SOLID) ty--
+  const floorTop = (ty + 1) * T
+  // The box's bottom edge *is* the floor, so `y + h` is somewhere to stand.
+  // A level shorter than a screen clamps the top rather than the bottom.
+  const y = Math.max(0, floorTop - DISPLAY.HEIGHT)
+  return { x, y, w: BOSS.ARENA_TILES * T, h: floorTop - y }
+}
+
+/**
+ * Where the camera sits during a boss fight, which is not quite the arena.
+ *
+ * The arena box's bottom edge is the floor, because that is what the King
+ * stands on. The camera drops a little further so there is ground under the
+ * fight rather than a horizon.
+ */
+export function bossCameraLock(w: World): Box | null {
+  if (!w.bossActive || !w.arena) return null
+  return { ...w.arena, y: w.arena.y + BOSS.ARENA_CAMERA_DROP }
 }
 
 export function update(w: World, input: InputFrame): void {
@@ -134,6 +195,8 @@ export function update(w: World, input: InputFrame): void {
   const enemyCtx = { map: w.map, collapsed: w.collapsed, player: w.player }
   for (const e of w.enemies) updateEnemy(enemyCtx, e)
 
+  stepBoss(w, input)
+
   resolveCombat(w, isHeld(input, Act.Jump))
   // After the move, so the frame a shell slams shut on Nib is the frame he
   // dies rather than the one after.
@@ -142,11 +205,68 @@ export function update(w: World, input: InputFrame): void {
   collectPickups(w)
   checkCheckpoints(w)
 
-  if (w.exit && !w.cleared && boxesOverlap(w.player, w.exit)) w.cleared = true
+  // The exit only counts once the King is finished. A level with a boss ends
+  // with the boss, not with a door behind him.
+  const bossSettled = w.boss === null || w.boss.state === 'dead'
+  if (w.exit && !w.cleared && bossSettled && boxesOverlap(w.player, w.exit)) w.cleared = true
 
   if (!w.player.alive) {
     w.respawnTimer++
     if (w.respawnTimer >= RULES.DEATH_ANIM_FRAMES) respawn(w)
+  }
+}
+
+/**
+ * Start the fight when Nib crosses into the bowl, then run it.
+ *
+ * The player is clamped to the arena for the duration. That is the soft wall
+ * standing in for a gate: it keeps a fixed camera honest, and it means the
+ * fight cannot be walked away from halfway through.
+ */
+function stepBoss(w: World, input: InputFrame): void {
+  const { arena } = w
+  if (!arena) return
+
+  if (!w.bossActive) {
+    if (w.player.x + w.player.w < arena.x) return
+    w.bossActive = true
+    w.boss = spawnBoss(w.bossDef, arena)
+  }
+
+  if (w.player.x < arena.x) {
+    w.player.x = arena.x
+    if (w.player.vx < 0) w.player.vx = 0
+  }
+
+  updateRocks(w.map, w.rocks)
+
+  const boss = w.boss
+  if (!boss || boss.state === 'dead') return
+  updateBoss(
+    {
+      map: w.map,
+      arena,
+      player: w.player,
+      rocks: w.rocks,
+      // Phase 3 lets two Snappers out of the sand, one either side of the bowl.
+      summonGuards: () => summonGuards(w, arena, boss),
+    },
+    boss,
+  )
+  void input
+}
+
+/**
+ * Two Snappers out of the sand, one either side of the bowl.
+ *
+ * Their row comes from the King's own feet rather than from the arena box: the
+ * arena spans the level's full height, and deriving a floor from it put crabs
+ * in mid-air in any level whose ground was not where the arithmetic assumed.
+ */
+function summonGuards(w: World, arena: Box, boss: Boss): void {
+  const row = Math.floor((boss.y + boss.h - 1) / T)
+  for (const tx of [Math.floor(arena.x / T) + 2, Math.floor((arena.x + arena.w) / T) - 3]) {
+    w.enemies.push(spawnEnemy({ type: 'snapper', x: tx, y: row }))
   }
 }
 
@@ -242,8 +362,14 @@ export function respawn(w: World): void {
   // Everything the room contained comes back, exactly as it was authored. A
   // half-cleared room on a retry would make the second attempt a different
   // level from the first, which is not the one the checkpoint promised.
+  // The boss fight restarts from its own beginning, guards and all. Half a
+  // fight is not the fight the conch at the door promised.
+  w.enemies.length = w.baseEnemies
   for (const e of w.enemies) resetEnemy(e)
   for (const c of w.clams) c.clock = c.phase
+  for (const r of w.rocks) r.alive = false
+  w.boss = null
+  w.bossActive = false
 }
 
 function resetEnemy(e: Enemy): void {

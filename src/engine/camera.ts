@@ -12,6 +12,14 @@ export function createCamera(): Camera {
   return { x: 0, y: 0, lookahead: 0 }
 }
 
+/** A region the camera is pinned to, for boss arenas and pressure rooms. */
+export interface Lock {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface CameraTarget {
   x: number
   y: number
@@ -28,7 +36,16 @@ export interface CameraTarget {
  * the screen from being a wall of unknown. The vertical dead zone plus a harder
  * snap when grounded stops every jump from heaving the whole view up and down.
  */
-export function updateCamera(cam: Camera, target: CameraTarget, map: TileMap): void {
+export function updateCamera(cam: Camera, target: CameraTarget, map: TileMap, lock?: Lock | null): void {
+  if (lock) {
+    // A boss arena is exactly one screen wide, so the fight gets a fixed frame
+    // and the lookahead stops fighting the player for the camera.
+    cam.x = clamp(lock.x, 0, Math.max(0, pixelWidth(map) - DISPLAY.WIDTH))
+    cam.y = clamp(lock.y, 0, Math.max(0, pixelHeight(map) - DISPLAY.HEIGHT))
+    cam.lookahead = 0
+    return
+  }
+
   const easeStep = DISPLAY.CAMERA_LOOKAHEAD / DISPLAY.CAMERA_EASE_FRAMES
   cam.lookahead = approach(cam.lookahead, target.facing * DISPLAY.CAMERA_LOOKAHEAD, easeStep)
 

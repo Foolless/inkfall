@@ -145,5 +145,38 @@ export const HAZARDS = {
   CLAM_TELEGRAPH: 20,
 } as const
 
+/**
+ * Bosses. PRD §6.3: three hits, three phases, one arena, no health bar.
+ *
+ * Per-phase values are indexed by phase - 1. Nothing here is random: a boss
+ * that rolls dice cannot be practised, and a boss that cannot be practised is
+ * not a NES boss.
+ */
+export const BOSS = {
+  HERMIT_HITS: 3,
+  /** He rears up before the first charge, so the fight has a beginning. */
+  WAKE_FRAMES: 90,
+  CHARGE_SPEED: [1.6, 1.6, 2.4],
+  IDLE_FRAMES: [70, 55, 40],
+  /** The damage window. Long, because the whole fight is this one moment. */
+  BONK_STUN: 90,
+  /** The wind-up before a rock leaves his claw. The arc is the rest of it. */
+  THROW_TELEGRAPH: 40,
+  ROCK_FLIGHT_FRAMES: 80,
+  ROCK_GRAVITY: 0.16,
+  GRAVITY: 0.42,
+  TERMINAL_FALL: 6.0,
+  DEATH_FRAMES: 120,
+  /** Exactly one screen wide, so a fixed camera can hold the whole fight. */
+  ARENA_TILES: 20,
+  /**
+   * How much sand the locked camera shows below the arena floor.
+   *
+   * Without it the floor sits exactly on the bottom edge of the screen and the
+   * King fights on a horizon rather than on a beach.
+   */
+  ARENA_CAMERA_DROP: 28,
+} as const
+
 /** Collision resolves in sub-steps no larger than this, so nothing tunnels. */
 export const MAX_SUBSTEP = 8

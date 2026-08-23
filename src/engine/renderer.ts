@@ -13,6 +13,8 @@ import { drawGameOver, drawLevelClear, drawPause, drawTitle } from './screens.js
 import { chapterOf } from '../content/chapters.js'
 import { tilesetOf, type Tileset } from '../content/tilesets/index.js'
 import { PICKUP_SPRITES } from '../content/sprites/pickups.js'
+import * as art from '../content/sprites/bosses.js'
+import { SHALLOWS } from '../content/palettes.js'
 import { drawSprite, SpriteCache } from './sprite.js'
 
 const T = DISPLAY.TILE
@@ -87,6 +89,7 @@ export class Renderer {
     this.drawClams(w, ox, oy)
     this.drawPickups(w, ox, oy)
     this.drawEnemies(w, ox, oy)
+    this.drawBoss(w, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
     this.drawHud(s)
 
@@ -288,6 +291,48 @@ export class Renderer {
         this.ctx.fillStyle = 'rgba(214,255,246,0.35)'
         this.ctx.fillRect(x, y, frame.w, frame.h)
       }
+    }
+  }
+
+  /**
+   * The King and his rocks.
+   *
+   * No health bar: the shell cracks a stage per hit, which is the only damage
+   * readout the fight has (PRD §6.3). Cracks are drawn rather than authored,
+   * so "visibly breaking" costs no extra frames.
+   */
+  private drawBoss(w: World, ox: number, oy: number): void {
+    const { ctx } = this
+    for (const r of w.rocks) {
+      if (!r.alive) continue
+      drawSprite(ctx, this.sprites.get(art.rock), r.x - ox - 1, r.y - oy - 1)
+    }
+
+    const b = w.boss
+    if (!b || b.state === 'dead') return
+
+    const exposed = b.state === 'exposed'
+    const frame = exposed ? art.hermitExposed : art.hermitIdle
+    const x = Math.floor(b.x - ox + (b.w - frame.w) / 2)
+    const y = Math.floor(b.y - oy + (b.h - frame.h))
+
+    // Dying: he flickers and sinks. Waking: he shudders.
+    if (b.state === 'dying' && (w.frame >> 1) % 2 === 0) return
+    const shudder = b.state === 'waking' && (w.frame >> 1) % 2 === 0 ? 1 : 0
+
+    drawSprite(ctx, this.sprites.get(frame, b.facing > 0), x + shudder, y)
+
+    ctx.fillStyle = SHALLOWS.URCHIN
+    for (let i = 0; i < b.hits; i++) {
+      const cx = x + 22 + i * 7
+      ctx.fillRect(cx, y + 8 + i * 3, 1, 9)
+      ctx.fillRect(cx + 1, y + 11 + i * 3, 3, 1)
+    }
+
+    // The window is the whole fight, so it is impossible to miss.
+    if (exposed && (w.frame >> 2) % 2 === 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.22)'
+      ctx.fillRect(x, y, frame.w, frame.h)
     }
   }
 

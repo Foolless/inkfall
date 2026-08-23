@@ -4,6 +4,7 @@ import { NIB_FRAMES } from '../src/content/sprites/nib.js'
 import { ENEMY_FRAMES } from '../src/content/sprites/enemies.js'
 import { PICKUP_FRAMES } from '../src/content/sprites/pickups.js'
 import { SHALLOWS_FRAMES } from '../src/content/tilesets/shallows.js'
+import { BOSS_FRAMES } from '../src/content/sprites/bosses.js'
 import { decode } from '../src/content/sprites/format.js'
 
 /**
@@ -28,7 +29,7 @@ describe('the master palette', () => {
   })
 })
 
-const ALL_FRAMES = [...NIB_FRAMES, ...ENEMY_FRAMES, ...PICKUP_FRAMES, ...SHALLOWS_FRAMES]
+const ALL_FRAMES = [...NIB_FRAMES, ...ENEMY_FRAMES, ...PICKUP_FRAMES, ...SHALLOWS_FRAMES, ...BOSS_FRAMES]
 
 describe('sprite palettes', () => {
   test('every frame uses at most 3 colours plus transparent', () => {
@@ -54,6 +55,27 @@ describe('sprite palettes', () => {
   test('the three tier palettes are the same length, so any frame reads under any of them', () => {
     expect(NIB_SPENT_PALETTE.length).toBe(NIB_PALETTE.length)
     expect(NIB_CHARGED_PALETTE.length).toBe(NIB_PALETTE.length)
+  })
+})
+
+describe('boss frames', () => {
+  /**
+   * Upright and bonked must share nothing, because the difference between them
+   * is the difference between "run" and "jump on him".
+   */
+  test('the two Hermit King poses are unmistakably different', () => {
+    const idle = BOSS_FRAMES.find((f) => f.name === 'hermitIdle')!
+    const exposed = BOSS_FRAMES.find((f) => f.name === 'hermitExposed')!
+    const silhouette = (f: typeof idle) => decode(f).map((p) => (p === 0 ? 0 : 1))
+    const a = silhouette(idle)
+    const b = silhouette(exposed)
+    const differing = a.filter((v, i) => v !== b[i]).length
+    expect(differing).toBeGreaterThan(a.length * 0.15)
+  })
+
+  test('he is big enough to be a boss', () => {
+    const idle = BOSS_FRAMES.find((f) => f.name === 'hermitIdle')!
+    expect(idle.w * idle.h).toBeGreaterThanOrEqual(48 * 32)
   })
 })
 

@@ -17,6 +17,8 @@ export const POINTS = {
   BULB_AT_TIER: 1_000,
   CORE_AT_TIER: 2_000,
   BOSS: 5_000,
+  /** Each of the three hits pays, so a fight in progress feels like progress. */
+  BOSS_HIT: 500,
   LEVEL_CLEAR: 1_000,
   PER_SECOND_REMAINING: 50,
   NO_DAMAGE: 5_000,
