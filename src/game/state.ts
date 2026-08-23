@@ -52,6 +52,14 @@ export interface Session {
    * does on a menu may ever cost them time.
    */
   uiFrames: number
+  /**
+   * Set when there is progress worth persisting.
+   *
+   * The session never touches storage itself — it flags, and the host writes.
+   * That keeps the state machine a pure function and keeps `localStorage` out
+   * of the replay path entirely.
+   */
+  pendingSave: boolean
 }
 
 /** Par clocks are per level; this is what an unauthored one falls back to. */
@@ -73,6 +81,7 @@ export function createSession(level: LevelDef): Session {
     noDamage: true,
     noDeath: true,
     uiFrames: 0,
+    pendingSave: false,
   }
 }
 
@@ -201,6 +210,7 @@ function clearLevel(s: Session): void {
 
 function finishLevel(s: Session): void {
   s.score += tallyTotal(s.tally)
+  s.pendingSave = true
   // One level in Phase 2, so clearing it ends the run. The world map picks this
   // up in Phase 4 and sends the player to the next node instead.
   s.screen = 'title'

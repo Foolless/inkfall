@@ -93,6 +93,54 @@ test('title to play to level clear and back, without touching the console', asyn
   expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
 })
 
+/**
+ * Progress survives a reload. The one bug class that costs a player their
+ * evening, so it gets a browser test rather than a unit test with a fake.
+ */
+test('clearing a level persists to localStorage and survives a reload', async ({ page }) => {
+  await page.goto('/?level=greybox')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+
+  await page.evaluate(() => window.__inkfall!.clear())
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
+  await page.waitForTimeout(600)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'title')
+
+  const stored = await page.evaluate(() => window.localStorage.getItem('inkfall.save.v1'))
+  expect(stored, 'nothing was written to the save key').not.toBeNull()
+  expect(JSON.parse(stored!).progress.cleared).toContain('greybox')
+
+  await page.reload()
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  const after = await page.evaluate(() => window.localStorage.getItem('inkfall.save.v1'))
+  expect(JSON.parse(after!).progress.cleared).toContain('greybox')
+})
+
+/** A save we cannot read must never be the reason someone loses their progress. */
+test('a corrupt save falls back to defaults, keeps a backup, and never clears the key', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.addInitScript(() => {
+    window.localStorage.setItem('inkfall.save.v1', '{"version":1,"progress":')
+  })
+  await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+
+  const state = await page.evaluate(() => ({
+    original: window.localStorage.getItem('inkfall.save.v1'),
+    backup: window.localStorage.getItem('inkfall.save.v1.bak'),
+  }))
+  expect(state.original).toBe('{"version":1,"progress":')
+  expect(state.backup).toBe('{"version":1,"progress":')
+
+  await expect(page.locator('#toast')).toBeVisible()
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
 test('the sprite editor loads', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))

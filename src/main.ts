@@ -8,6 +8,7 @@ import { greybox } from './content/levels/greybox.js'
 import { levelDef } from './content/levels/index.js'
 import { createSession, updateSession } from './game/state.js'
 import { kill } from './game/player.js'
+import { loadSave, recordClear, recordHighScore, writeSave, type SaveData } from './engine/save.js'
 
 const canvas = document.getElementById('game')
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing')
@@ -27,6 +28,38 @@ const requested = params.get('level')
 const level = requested === null ? greybox : levelDef(requested)
 
 const session = createSession(level)
+
+// Progress is loaded once at boot. `writable` is false when the file was
+// unreadable or came from a newer build — in both cases the game is playable
+// and the existing file is left exactly as it was found.
+const loaded = loadSave(window.localStorage)
+let save: SaveData = loaded.data
+const canWrite = loaded.writable
+if (loaded.message) showToast(loaded.message)
+
+function showToast(message: string): void {
+  const el = document.getElementById('toast')
+  if (!el) return
+  el.textContent = message
+  el.hidden = false
+  window.setTimeout(() => (el.hidden = true), 8_000)
+}
+
+function persist(): void {
+  if (!canWrite) return
+  save = recordClear(save, level.id, {
+    pearls: session.world.pearls,
+    seconds: session.levelFrames / 60,
+  })
+  save = recordHighScore(save, {
+    score: session.score,
+    character: save.characters.selected,
+    date: new Date().toISOString().slice(0, 10),
+    levelsCleared: save.progress.cleared.length,
+    deaths: session.world.player.deaths,
+  })
+  writeSave(window.localStorage, save)
+}
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'F1') {
@@ -49,6 +82,10 @@ startLoop({
   update: () => {
     const input = keyboard.snapshot()
     updateSession(session, input)
+    if (session.pendingSave) {
+      session.pendingSave = false
+      persist()
+    }
     // Animation advances on the simulation step, not the render, so a cycle
     // never speeds up on a fast display or stutters on a slow one.
     updateAnim(anim, session.world.player)
@@ -72,6 +109,7 @@ declare global {
       ink: () => number
       lives: () => number
       score: () => number
+      pearls: () => number
       reset: () => void
       kill: () => void
       clear: () => void
@@ -97,4 +135,5 @@ window.__inkfall = {
   clear: () => {
     session.world.cleared = true
   },
+  pearls: () => save.progress.pearls[level.id]?.filter(Boolean).length ?? 0,
 }

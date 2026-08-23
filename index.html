@@ -10,11 +10,16 @@
       body { display: grid; place-items: center; font-family: ui-monospace, monospace; color: #69808a; }
       canvas { display: block; image-rendering: pixelated; background: #0b1116; }
       #help { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: .06em; }
+      /* Non-blocking, and it never covers the playfield: a save problem is
+         something to tell the player about, not something to stop them for. */
+      #toast { position: fixed; top: 8px; left: 0; right: 0; margin: 0; text-align: center; font-size: 11px; color: #ffd9a0; }
+      #toast[hidden] { display: none; }
       kbd { color: #9cb0b8; border: 1px solid #1d2b36; border-bottom-width: 2px; border-radius: 3px; padding: 1px 5px; }
     </style>
   </head>
   <body>
     <canvas id="game" aria-label="INKFALL"></canvas>
+    <p id="toast" hidden></p>
     <p id="help">
       <kbd>← →</kbd> move &nbsp; <kbd>Space</kbd> jump &nbsp; <kbd>Shift</kbd> run &nbsp;
       <kbd>X</kbd> ink dash &nbsp; <kbd>Esc</kbd> pause &nbsp; <kbd>R</kbd> restart &nbsp; <kbd>F1</kbd> debug
