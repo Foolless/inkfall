@@ -263,7 +263,7 @@ describe('chapters own tilesets, palettes and music — levels do not', () => {
 
   test('no level declares a palette or a tileset of its own', () => {
     for (const id of levelIds()) {
-      const d = levelDef(id) as Record<string, unknown>
+      const d = levelDef(id) as unknown as Record<string, unknown>
       expect(d.palette, `${id} declares a palette`).toBeUndefined()
       expect(d.tileset, `${id} declares a tileset`).toBeUndefined()
       expect(d.music, `${id} declares music`).toBeUndefined()
