@@ -19,6 +19,8 @@ export const DISPLAY = {
   CAMERA_EASE_FRAMES: 20,
   CAMERA_DEADZONE_Y: 48,
   HITSTOP_FRAMES: 3,
+  /** Shrinking freezes a beat longer than a stomp — PRD §9.5. */
+  HITSTOP_SHRINK: 4,
 } as const
 
 export const PHYSICS = {
@@ -99,6 +101,33 @@ export const RULES = {
   RESPAWN_TIER: FULL, // never Spent, never Charged
   DEATH_ANIM_FRAMES: 90,
   CRUMBLE_RESPAWN: 180,
+} as const
+
+/**
+ * The World 1 roster. PRD §6.1.
+ *
+ * Speeds are pixels per frame; distances in this block are **tiles**, because
+ * that is the unit a level designer thinks in when placing a Puffer.
+ */
+export const ENEMIES = {
+  /** Crab. Walks a platform and turns at ledges and walls. */
+  SNAPPER_SPEED: 0.6,
+  /** Jellyfish. Sine float, ignores terrain, damaging on every side. */
+  DRIFTER_AMPLITUDE: 3,
+  DRIFTER_PERIOD: 120,
+  /** Inflates within this many tiles of Nib, and stays inflated this long. */
+  PUFFER_TRIGGER: 3,
+  PUFFER_INFLATE: 90,
+  /** Enemies fall at Nib's rate — one gravity for the whole world. */
+  GRAVITY: 0.42,
+  TERMINAL_FALL: 6.0,
+  /**
+   * How far into an enemy's head still counts as a stomp.
+   *
+   * The forgiveness that makes stomping feel fair: land anywhere in the top few
+   * pixels and it reads as a stomp, not as walking into the side of a crab.
+   */
+  STOMP_BAND: 6,
 } as const
 
 /** Collision resolves in sub-steps no larger than this, so nothing tunnels. */

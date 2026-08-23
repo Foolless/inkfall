@@ -39,13 +39,24 @@ export function hashWorld(w: World): string {
     p.iframes,
     p.inWater ? 1 : 0,
     p.alive ? 1 : 0,
+    p.prevY,
+    p.jumping ? 1 : 0,
     p.stunCloud,
     p.deaths,
     w.checkpoint?.x ?? -1,
     w.checkpoint?.y ?? -1,
+    w.score,
+    w.chain,
+    w.hitstop,
+    w.livesOwed,
   ]
 
   for (const pick of w.pickups) nums.push(pick.taken ? 1 : 0)
+  // Enemies are simulation state: a Drifter one pixel off its sine is a
+  // divergence, and this is the test that has to notice.
+  for (const e of w.enemies) {
+    nums.push(e.alive ? 1 : 0, e.x, e.y, e.vx, e.vy, e.facing, e.clock, e.stun, e.inflated, e.w, e.h)
+  }
   // Sets and Maps iterate in insertion order, which can differ between two runs
   // that reached the same state by different routes. Sort so the hash reflects
   // the state itself, not the history that produced it.

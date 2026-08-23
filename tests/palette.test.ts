@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { isMasterColour, MASTER, NIB_CHARGED_PALETTE, NIB_PALETTE, NIB_SPENT_PALETTE } from '../src/content/palettes.js'
 import { NIB_FRAMES } from '../src/content/sprites/nib.js'
+import { ENEMY_FRAMES } from '../src/content/sprites/enemies.js'
 import { decode } from '../src/content/sprites/format.js'
 
 /**
@@ -25,15 +26,17 @@ describe('the master palette', () => {
   })
 })
 
+const ALL_FRAMES = [...NIB_FRAMES, ...ENEMY_FRAMES]
+
 describe('sprite palettes', () => {
-  test('every Nib frame uses at most 3 colours plus transparent', () => {
-    for (const f of NIB_FRAMES) {
+  test('every frame uses at most 3 colours plus transparent', () => {
+    for (const f of ALL_FRAMES) {
       expect(f.palette.length, `${f.name} palette`).toBeLessThanOrEqual(3)
     }
   })
 
   test('every colour any sprite uses comes from the master palette', () => {
-    for (const f of NIB_FRAMES) {
+    for (const f of ALL_FRAMES) {
       for (const c of f.palette) {
         expect(isMasterColour(c), `${f.name} uses ${c}, which is not in the master palette`).toBe(true)
       }
@@ -52,9 +55,28 @@ describe('sprite palettes', () => {
   })
 })
 
+describe('enemy frames', () => {
+  /**
+   * PRD §13: every hazard is distinguished by shape, never colour alone. The
+   * cheapest proxy for that is footprint — a deflated Puffer and an inflated one
+   * must not be confusable, and they are the pair a player dies to.
+   */
+  test('the two Puffer states have plainly different footprints', () => {
+    const deflated = ENEMY_FRAMES.find((f) => f.name === 'pufferDeflated')!
+    const inflated = ENEMY_FRAMES.find((f) => f.name === 'pufferInflated')!
+    const area = (f: typeof deflated) => decode(f).filter((p) => p !== 0).length
+    expect(area(inflated)).toBeGreaterThan(area(deflated) * 1.8)
+  })
+
+  test('every species has a distinct silhouette', () => {
+    const shapes = ENEMY_FRAMES.map((f) => decode(f).map((p) => (p === 0 ? 0 : 1)).join(''))
+    expect(new Set(shapes).size).toBe(shapes.length)
+  })
+})
+
 describe('Nib frames', () => {
   test('every frame decodes to exactly w*h pixels', () => {
-    for (const f of NIB_FRAMES) expect(decode(f).length).toBe(f.w * f.h)
+    for (const f of ALL_FRAMES) expect(decode(f).length).toBe(f.w * f.h)
   })
 
   test('Full-tier frames are 16x16 and Spent-tier frames are 12x12', () => {
@@ -65,7 +87,7 @@ describe('Nib frames', () => {
   })
 
   test('no frame is blank — an all-transparent cel is an authoring slip', () => {
-    for (const f of NIB_FRAMES) {
+    for (const f of ALL_FRAMES) {
       expect(decode(f).some((p) => p !== 0), `${f.name} is entirely transparent`).toBe(true)
     }
   })
@@ -89,8 +111,8 @@ describe('Nib frames', () => {
     }
   })
 
-  test('frame names are unique', () => {
-    const names = NIB_FRAMES.map((f) => f.name)
+  test('frame names are unique across the whole game', () => {
+    const names = ALL_FRAMES.map((f) => f.name)
     expect(new Set(names).size).toBe(names.length)
   })
 })

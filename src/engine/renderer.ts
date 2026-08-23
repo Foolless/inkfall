@@ -4,6 +4,7 @@ import { tierOf } from '../game/player.js'
 import type { World } from '../game/world.js'
 import type { Camera } from './camera.js'
 import { frameFor, paletteFor, type Anim } from './anim.js'
+import { enemyFrame } from './enemy-anim.js'
 import { drawSprite, SpriteCache } from './sprite.js'
 
 const T = DISPLAY.TILE
@@ -61,6 +62,7 @@ export class Renderer {
 
     this.drawTiles(w, ox, oy)
     this.drawPickups(w, ox, oy)
+    this.drawEnemies(w, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
     this.drawHud(w)
   }
@@ -136,6 +138,29 @@ export class Renderer {
       ctx.fillRect(Math.floor(p.x - ox), Math.floor(p.y - oy + pulse), p.w, p.h)
       ctx.fillStyle = p.kind === 'inkCore' ? '#e761ef' : '#d6fff6'
       ctx.fillRect(Math.floor(p.x - ox + 2), Math.floor(p.y - oy - 1 + pulse), p.w - 4, 2)
+    }
+  }
+
+  /**
+   * Enemies are drawn bottom-aligned and horizontally centred on their box.
+   *
+   * Bottom rather than centre because a crab that hovers two pixels above the
+   * sand reads as a bug, and a hurtbox shorter than its sprite is the normal
+   * case here rather than the exception.
+   */
+  private drawEnemies(w: World, ox: number, oy: number): void {
+    for (const e of w.enemies) {
+      if (!e.alive) continue
+      const frame = enemyFrame(e, w.frame)
+      const x = Math.floor(e.x - ox + (e.w - frame.w) / 2)
+      const y = Math.floor(e.y - oy + (e.h - frame.h))
+      drawSprite(this.ctx, this.sprites.get(frame, e.facing > 0), x, y)
+      // A stunned enemy flickers, so "why is that crab not moving" is never a
+      // question the player has to ask.
+      if (e.stun > 0 && (w.frame >> 1) % 2 === 0) {
+        this.ctx.fillStyle = 'rgba(214,255,246,0.35)'
+        this.ctx.fillRect(x, y, frame.w, frame.h)
+      }
     }
   }
 

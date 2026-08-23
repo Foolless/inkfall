@@ -1,9 +1,12 @@
-import type { InputFrame } from '../engine/input.js'
+import { Act, isHeld, type InputFrame } from '../engine/input.js'
 import { CHARGED_TIER, DISPLAY, FULL, RULES, type TierIndex } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
 import { Tile, type TileMap } from './tilemap.js'
 import { loadLevel, type LevelDef, type LoadedLevel } from '../content/levels/format.js'
 import { createPlayer, promote, setTier, updatePlayer, type Player, type PlayerStepContext } from './player.js'
+import { isEnemyKind, spawnEnemy, updateEnemy, type Enemy, type EnemyKind } from './enemies/index.js'
+import { resolveCombat } from './combat.js'
+import { livesEarned, POINTS } from './score.js'
 
 const T = DISPLAY.TILE
 
@@ -20,6 +23,7 @@ export interface World {
   map: TileMap
   player: Player
   pickups: Pickup[]
+  enemies: Enemy[]
   /** Tile indices of crumble tiles that have fallen away. */
   collapsed: Set<number>
   /** Tile index -> frames of standing left before collapse. */
@@ -36,6 +40,13 @@ export interface World {
   shells: number
   /** Which of this level's three pearls have been picked up this run. */
   pearls: [boolean, boolean, boolean]
+  score: number
+  /** Stomps landed since the last ground contact. Drives the chain payout. */
+  chain: number
+  /** Frames the simulation is frozen for. Juice with state, so it is hashed. */
+  hitstop: number
+  /** Extra lives the shell counter has earned but not yet been credited. */
+  livesOwed: number
 }
 
 /** Collectible footprints, centred in their tile. Generous, not pixel-exact. */
@@ -61,10 +72,15 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
       }
     })
 
+  const enemies = level.entities
+    .filter((e): e is typeof e & { type: EnemyKind } => isEnemyKind(e.type))
+    .map(spawnEnemy)
+
   return {
     map,
     player: createPlayer(spawn.x, spawn.y),
     pickups,
+    enemies,
     collapsed: new Set(),
     crumbling: new Map(),
     respawning: new Map(),
@@ -76,16 +92,33 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     respawnTimer: 0,
     shells: 0,
     pearls: [false, false, false],
+    score: 0,
+    chain: 0,
+    hitstop: 0,
+    livesOwed: 0,
   }
 }
 
 export function update(w: World, input: InputFrame): void {
   w.frame++
 
+  // Hitstop freezes the whole simulation for a few frames on a stomp or a
+  // shrink. The frame counter still advances, so the clock a speedrun is timed
+  // against never stops — a hit costs you the time it is worth.
+  if (w.hitstop > 0) {
+    w.hitstop--
+    return
+  }
+
   tickCrumble(w)
 
   const ctx: PlayerStepContext = { map: w.map, collapsed: w.collapsed, crumbling: w.crumbling }
   updatePlayer(ctx, w.player, input)
+
+  const enemyCtx = { map: w.map, collapsed: w.collapsed, player: w.player }
+  for (const e of w.enemies) updateEnemy(enemyCtx, e)
+
+  resolveCombat(w, isHeld(input, Act.Jump))
 
   collectPickups(w)
   checkCheckpoints(w)
@@ -123,17 +156,27 @@ function collectPickups(w: World): void {
     if (pick.taken || !w.player.alive || !boxesOverlap(w.player, pick)) continue
     pick.taken = true
     switch (pick.kind) {
-      case 'shell':
+      case 'shell': {
+        const before = w.shells
         w.shells++
+        w.livesOwed += livesEarned(before, w.shells)
+        w.score += POINTS.SHELL
         break
+      }
       case 'pearl':
         // Persistent across runs — the save layer reads this on level clear.
         if (pick.id >= 0) w.pearls[pick.id] = true
+        w.score += POINTS.PEARL
+        // A pearl is worth a life on the run that first finds it (PRD §8.3).
+        w.livesOwed++
         break
       default: {
         // A Core promotes one rung like a Bulb does — but its ceiling is Charged.
         const ceiling: TierIndex = pick.kind === 'inkCore' ? CHARGED_TIER : FULL
-        promote(w.map, w.player, ceiling, w.collapsed)
+        const promoted = promote(w.map, w.player, ceiling, w.collapsed)
+        // Collected at a tier you already hold, it refills and pays out instead.
+        if (!promoted) w.score += pick.kind === 'inkCore' ? POINTS.CORE_AT_TIER : POINTS.BULB_AT_TIER
+        break
       }
     }
   }
@@ -166,13 +209,36 @@ export function respawn(w: World): void {
   p.dashFrames = 0
   p.dashCooldown = 0
   p.stunCloud = 0
+  p.jumping = false
   p.inkTimer = 0
   setTier(w.map, p, RULES.RESPAWN_TIER, w.collapsed)
   p.ink = 3
+  p.prevY = p.y
   w.respawnTimer = 0
+  w.chain = 0
+  w.hitstop = 0
   w.collapsed.clear()
   w.crumbling.clear()
   w.respawning.clear()
+  // Everything the room contained comes back, exactly as it was authored. A
+  // half-cleared room on a retry would make the second attempt a different
+  // level from the first, which is not the one the checkpoint promised.
+  for (const e of w.enemies) resetEnemy(e)
+}
+
+function resetEnemy(e: Enemy): void {
+  e.alive = true
+  e.x = e.homeX
+  e.y = e.homeY
+  // Size too: a Puffer killed mid-inflate must not come back as a spike ball.
+  e.w = e.spawnW
+  e.h = e.spawnH
+  e.vx = 0
+  e.vy = 0
+  e.facing = -1
+  e.clock = 0
+  e.stun = 0
+  e.inflated = 0
 }
 
 /** Restart cleanly — used by tests and by the debug reset key. */
