@@ -130,5 +130,20 @@ export const ENEMIES = {
   STOMP_BAND: 6,
 } as const
 
+/**
+ * Hazards with a clock. PRD §6.2.
+ *
+ * The crush clam's numbers are the honest-difficulty pillar in miniature: the
+ * slam is fast because a slow one is not frightening, and the telegraph is long
+ * because a death the player could not have seen coming is the one thing the
+ * game promises never to do.
+ */
+export const HAZARDS = {
+  CLAM_OPEN: 90,
+  CLAM_SLAM: 6,
+  CLAM_CLOSED: 60,
+  CLAM_TELEGRAPH: 20,
+} as const
+
 /** Collision resolves in sub-steps no larger than this, so nothing tunnels. */
 export const MAX_SUBSTEP = 8

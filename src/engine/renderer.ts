@@ -5,6 +5,7 @@ import type { World } from '../game/world.js'
 import type { Camera } from './camera.js'
 import { frameFor, paletteFor, type Anim } from './anim.js'
 import { enemyFrame } from './enemy-anim.js'
+import { clamState, isTelegraphing } from '../game/hazards.js'
 import { drawSprite, SpriteCache } from './sprite.js'
 
 const T = DISPLAY.TILE
@@ -61,6 +62,7 @@ export class Renderer {
     ctx.fillRect(0, 0, DISPLAY.WIDTH, DISPLAY.HEIGHT)
 
     this.drawTiles(w, ox, oy)
+    this.drawClams(w, ox, oy)
     this.drawPickups(w, ox, oy)
     this.drawEnemies(w, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
@@ -138,6 +140,39 @@ export class Renderer {
       ctx.fillRect(Math.floor(p.x - ox), Math.floor(p.y - oy + pulse), p.w, p.h)
       ctx.fillStyle = p.kind === 'inkCore' ? '#e761ef' : '#d6fff6'
       ctx.fillRect(Math.floor(p.x - ox + 2), Math.floor(p.y - oy - 1 + pulse), p.w - 4, 2)
+    }
+  }
+
+  /**
+   * A clam reads by shape alone: open is a gaping V, closed is a flat lid, and
+   * the telegraph shudders. None of that depends on colour, per PRD §13.
+   */
+  private drawClams(w: World, ox: number, oy: number): void {
+    const { ctx } = this
+    for (const c of w.clams) {
+      const state = clamState(c)
+      const shudder = isTelegraphing(c) && (w.frame >> 1) % 2 === 0 ? 1 : 0
+      const x = Math.floor(c.x - ox) + shudder
+      const y = Math.floor(c.y - oy)
+
+      ctx.fillStyle = '#a8875c'
+      ctx.fillRect(x, y + c.h - 4, c.w, 4) // the lower shell, always there
+
+      if (state === 'closed') {
+        ctx.fillStyle = '#d6bd8f'
+        ctx.fillRect(x, y, c.w, c.h - 4)
+        ctx.fillStyle = '#f4e4c1'
+        ctx.fillRect(x, y, c.w, 2)
+        continue
+      }
+
+      // Open: two jaws with a gap between them, and teeth so the gap reads as a
+      // mouth rather than a doorway.
+      const gape = state === 'slamming' ? 2 : c.h - 5
+      ctx.fillStyle = '#d6bd8f'
+      ctx.fillRect(x, y, c.w, c.h - 4 - gape)
+      ctx.fillStyle = '#e8825a'
+      for (let i = 0; i < c.w / 4; i++) ctx.fillRect(x + i * 4 + 1, y + c.h - 4 - 2, 2, 2)
     }
   }
 

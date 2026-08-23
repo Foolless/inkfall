@@ -20,7 +20,18 @@ export interface SolidQuery {
   prevBottom: number
   /** Crumble tiles that have collapsed and are not currently solid. */
   collapsed?: ReadonlySet<number> | undefined
+  /**
+   * Solid boxes that are not part of the tilemap — a closed crush clam, and in
+   * later worlds a Hookline's flat top.
+   *
+   * They go through the same sub-stepped sweep as terrain rather than a
+   * separate pass, because a separate pass is how a thing that is solid on
+   * Tuesday tunnels through on Wednesday.
+   */
+  solids?: readonly Box[] | undefined
 }
+
+export { overlapsSolidTile }
 
 export function isSolid(map: TileMap, tx: number, ty: number, q: SolidQuery): boolean {
   const t: TileId = tileAt(map, tx, ty)
@@ -34,6 +45,14 @@ export function isSolid(map: TileMap, tx: number, ty: number, q: SolidQuery): bo
 }
 
 export function overlapsSolid(map: TileMap, box: Box, q: SolidQuery): boolean {
+  if (overlapsSolidTile(map, box, q)) return true
+  if (q.solids) {
+    for (const s of q.solids) if (boxesOverlap(box, s)) return true
+  }
+  return false
+}
+
+function overlapsSolidTile(map: TileMap, box: Box, q: SolidQuery): boolean {
   const x0 = Math.floor(box.x / T)
   const x1 = Math.floor((box.x + box.w - EPS) / T)
   const y0 = Math.floor(box.y / T)
@@ -55,9 +74,15 @@ export function overlapsSolid(map: TileMap, box: Box, q: SolidQuery): boolean {
  *
  * Returns true if the move was blocked.
  */
-export function moveX(map: TileMap, box: Box, dx: number, collapsed?: ReadonlySet<number>): boolean {
+export function moveX(
+  map: TileMap,
+  box: Box,
+  dx: number,
+  collapsed?: ReadonlySet<number>,
+  solids?: readonly Box[],
+): boolean {
   if (dx === 0) return false
-  const q: SolidQuery = { downward: false, prevBottom: box.y + box.h, collapsed }
+  const q: SolidQuery = { downward: false, prevBottom: box.y + box.h, collapsed, solids }
   const sign = Math.sign(dx)
   let remaining = Math.abs(dx)
 
@@ -67,11 +92,18 @@ export function moveX(map: TileMap, box: Box, dx: number, collapsed?: ReadonlySe
     box.x += step * sign
 
     if (overlapsSolid(map, box, q)) {
-      if (sign > 0) {
-        box.x = Math.floor((box.x + box.w - EPS) / T) * T - box.w
-      } else {
-        box.x = (Math.floor(box.x / T) + 1) * T
+      // Snap to whichever blocker is nearest along the direction of travel.
+      // Taking the tile grid alone would over- or under-shoot whenever the
+      // thing actually in the way was a clam rather than a wall.
+      let edge = sign > 0 ? Math.floor((box.x + box.w - EPS) / T) * T : (Math.floor(box.x / T) + 1) * T
+      if (!overlapsSolidTile(map, box, q)) edge = sign > 0 ? Infinity : -Infinity
+      if (q.solids) {
+        for (const s of q.solids) {
+          if (!boxesOverlap(box, s)) continue
+          edge = sign > 0 ? Math.min(edge, s.x) : Math.max(edge, s.x + s.w)
+        }
       }
+      box.x = sign > 0 ? edge - box.w : edge
       return true
     }
   }
@@ -86,12 +118,18 @@ export interface MoveYResult {
   landedTile: number
 }
 
-export function moveY(map: TileMap, box: Box, dy: number, collapsed?: ReadonlySet<number>): MoveYResult {
+export function moveY(
+  map: TileMap,
+  box: Box,
+  dy: number,
+  collapsed?: ReadonlySet<number>,
+  solids?: readonly Box[],
+): MoveYResult {
   const result: MoveYResult = { blocked: false, landed: false, landedTile: -1 }
   if (dy === 0) return result
 
   const sign = Math.sign(dy)
-  const q: SolidQuery = { downward: sign > 0, prevBottom: box.y + box.h, collapsed }
+  const q: SolidQuery = { downward: sign > 0, prevBottom: box.y + box.h, collapsed, solids }
   let remaining = Math.abs(dy)
 
   while (remaining > 0) {
@@ -100,13 +138,26 @@ export function moveY(map: TileMap, box: Box, dy: number, collapsed?: ReadonlySe
     box.y += step * sign
 
     if (overlapsSolid(map, box, q)) {
+      const onTile = overlapsSolidTile(map, box, q)
+      let edge = sign > 0 ? Math.floor((box.y + box.h - EPS) / T) * T : (Math.floor(box.y / T) + 1) * T
+      if (!onTile) edge = sign > 0 ? Infinity : -Infinity
+      if (q.solids) {
+        for (const s of q.solids) {
+          if (!boxesOverlap(box, s)) continue
+          edge = sign > 0 ? Math.min(edge, s.y) : Math.max(edge, s.y + s.h)
+        }
+      }
+
       if (sign > 0) {
-        const ty = Math.floor((box.y + box.h - EPS) / T)
-        box.y = ty * T - box.h
+        box.y = edge - box.h
         result.landed = true
-        result.landedTile = ty * map.width + Math.floor((box.x + box.w / 2) / T)
+        // A crumble timer only starts on a real tile; landing on a clam's shell
+        // reports -1, which startCrumble ignores.
+        result.landedTile = onTile
+          ? Math.floor((box.y + box.h + EPS) / T) * map.width + Math.floor((box.x + box.w / 2) / T)
+          : -1
       } else {
-        box.y = (Math.floor(box.y / T) + 1) * T
+        box.y = edge
       }
       result.blocked = true
       return result
@@ -118,9 +169,14 @@ export function moveY(map: TileMap, box: Box, dy: number, collapsed?: ReadonlySe
 }
 
 /** True when solid ground sits directly under the box. */
-export function isGrounded(map: TileMap, box: Box, collapsed?: ReadonlySet<number>): boolean {
+export function isGrounded(
+  map: TileMap,
+  box: Box,
+  collapsed?: ReadonlySet<number>,
+  solids?: readonly Box[],
+): boolean {
   const probe: Box = { x: box.x, y: box.y + 1, w: box.w, h: box.h }
-  const q: SolidQuery = { downward: true, prevBottom: box.y + box.h, collapsed }
+  const q: SolidQuery = { downward: true, prevBottom: box.y + box.h, collapsed, solids }
   return overlapsSolid(map, probe, q)
 }
 

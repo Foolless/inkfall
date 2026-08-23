@@ -157,12 +157,15 @@ export interface PlayerStepContext {
   collapsed: Set<number>
   /** Tile index -> frames of standing left before it collapses. */
   crumbling: Map<number, number>
+  /** Solid boxes that are not terrain — closed crush clams, for now. */
+  solids?: readonly Box[]
 }
 
 export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFrame): void {
   if (!p.alive) return
   p.prevY = p.y
   const { map, collapsed } = ctx
+  const solids = ctx.solids
   const tier = tierOf(p)
 
   if (p.dashCooldown > 0) p.dashCooldown--
@@ -201,8 +204,8 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   applyCurrents(map, p)
 
   // X then Y, each in sub-steps — see collision.ts.
-  moveX(map, p, p.vx, collapsed)
-  const vres = moveY(map, p, p.vy, collapsed)
+  moveX(map, p, p.vx, collapsed, solids)
+  const vres = moveY(map, p, p.vy, collapsed, solids)
   if (vres.blocked) {
     if (p.vy > 0 && vres.landedTile >= 0) startCrumble(ctx, vres.landedTile, tier.crumbleHold)
     p.vy = 0
@@ -215,7 +218,7 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
     p.vy *= INK.DASH_CARRYOVER
   }
 
-  const grounded = isGrounded(map, p, collapsed)
+  const grounded = isGrounded(map, p, collapsed, solids)
   if (grounded) p.jumping = false
   if (grounded && !p.grounded) p.dashCooldown = 0
   if (grounded) p.coyote = PHYSICS.COYOTE_FRAMES

@@ -7,6 +7,7 @@ import { createPlayer, promote, setTier, updatePlayer, type Player, type PlayerS
 import { isEnemyKind, spawnEnemy, updateEnemy, type Enemy, type EnemyKind } from './enemies/index.js'
 import { resolveCombat } from './combat.js'
 import { livesEarned, POINTS } from './score.js'
+import { checkClams, clamSolids, spawnClam, updateClam, type Clam } from './hazards.js'
 
 const T = DISPLAY.TILE
 
@@ -24,6 +25,7 @@ export interface World {
   player: Player
   pickups: Pickup[]
   enemies: Enemy[]
+  clams: Clam[]
   /** Tile indices of crumble tiles that have fallen away. */
   collapsed: Set<number>
   /** Tile index -> frames of standing left before collapse. */
@@ -47,6 +49,14 @@ export interface World {
   hitstop: number
   /** Extra lives the shell counter has earned but not yet been credited. */
   livesOwed: number
+  /**
+   * Reused array for the per-frame list of solid clams.
+   *
+   * Ugly, and deliberate: PRD §12.6 asks for zero allocations in the update
+   * loop, and rebuilding this list sixty times a second is exactly the kind of
+   * garbage that adds up to a dropped frame.
+   */
+  solidScratch: Box[]
 }
 
 /** Collectible footprints, centred in their tile. Generous, not pixel-exact. */
@@ -76,11 +86,14 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     .filter((e): e is typeof e & { type: EnemyKind } => isEnemyKind(e.type))
     .map(spawnEnemy)
 
+  const clams = level.entities.filter((e): e is typeof e & { type: 'clam' } => e.type === 'clam').map(spawnClam)
+
   return {
     map,
     player: createPlayer(spawn.x, spawn.y),
     pickups,
     enemies,
+    clams,
     collapsed: new Set(),
     crumbling: new Map(),
     respawning: new Map(),
@@ -96,6 +109,7 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     chain: 0,
     hitstop: 0,
     livesOwed: 0,
+    solidScratch: [],
   }
 }
 
@@ -111,14 +125,19 @@ export function update(w: World, input: InputFrame): void {
   }
 
   tickCrumble(w)
+  for (const c of w.clams) updateClam(c)
+  const solids = clamSolids(w.clams, w.solidScratch)
 
-  const ctx: PlayerStepContext = { map: w.map, collapsed: w.collapsed, crumbling: w.crumbling }
+  const ctx: PlayerStepContext = { map: w.map, collapsed: w.collapsed, crumbling: w.crumbling, solids }
   updatePlayer(ctx, w.player, input)
 
   const enemyCtx = { map: w.map, collapsed: w.collapsed, player: w.player }
   for (const e of w.enemies) updateEnemy(enemyCtx, e)
 
   resolveCombat(w, isHeld(input, Act.Jump))
+  // After the move, so the frame a shell slams shut on Nib is the frame he
+  // dies rather than the one after.
+  checkClams(w.clams, w.player)
 
   collectPickups(w)
   checkCheckpoints(w)
@@ -224,6 +243,7 @@ export function respawn(w: World): void {
   // half-cleared room on a retry would make the second attempt a different
   // level from the first, which is not the one the checkpoint promised.
   for (const e of w.enemies) resetEnemy(e)
+  for (const c of w.clams) c.clock = c.phase
 }
 
 function resetEnemy(e: Enemy): void {

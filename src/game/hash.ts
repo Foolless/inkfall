@@ -57,6 +57,7 @@ export function hashWorld(w: World): string {
   for (const e of w.enemies) {
     nums.push(e.alive ? 1 : 0, e.x, e.y, e.vx, e.vy, e.facing, e.clock, e.stun, e.inflated, e.w, e.h)
   }
+  for (const c of w.clams) nums.push(c.clock)
   // Sets and Maps iterate in insertion order, which can differ between two runs
   // that reached the same state by different routes. Sort so the hash reflects
   // the state itself, not the history that produced it.
