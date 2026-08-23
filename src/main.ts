@@ -1,3 +1,4 @@
+import { createAnim, updateAnim } from './engine/anim.js'
 import { createCamera, updateCamera } from './engine/camera.js'
 import { DebugOverlay } from './engine/debug.js'
 import { Keyboard } from './engine/input.js'
@@ -12,6 +13,7 @@ if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missin
 const renderer = new Renderer(canvas)
 const camera = createCamera()
 const debug = new DebugOverlay()
+const anim = createAnim()
 const keyboard = new Keyboard()
 keyboard.attach(window)
 
@@ -36,12 +38,15 @@ startLoop({
   update: () => {
     const input = keyboard.snapshot()
     update(world, input)
+    // Animation advances on the simulation step, not the render, so a cycle
+    // never speeds up on a fast display or stutters on a slow one.
+    updateAnim(anim, world.player)
     if (world.cleared) world = resetWorld(greybox)
   },
   render: (frameTimeMs) => {
     debug.sample(frameTimeMs)
     updateCamera(camera, world.player, world.map)
-    renderer.draw(world, camera)
+    renderer.draw(world, camera, anim)
     debug.draw(renderer.ctx, world, camera)
   },
 })

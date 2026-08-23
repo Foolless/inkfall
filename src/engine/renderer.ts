@@ -3,6 +3,8 @@ import { Tile, tileAt, type TileId } from '../game/tilemap.js'
 import { tierOf } from '../game/player.js'
 import type { World } from '../game/world.js'
 import type { Camera } from './camera.js'
+import { frameFor, paletteFor, type Anim } from './anim.js'
+import { drawSprite, SpriteCache } from './sprite.js'
 
 const T = DISPLAY.TILE
 
@@ -25,11 +27,9 @@ const COLOURS: Record<TileId, string | null> = {
   [Tile.SLICK]: '#4a5f6b',
 }
 
-const TIER_COLOUR = ['#b9a6d8', '#7d5fc4', '#1b1230'] as const
-const TIER_EDGE = ['#d8ccec', '#a98ee0', '#00e5cc'] as const
-
 export class Renderer {
   readonly ctx: CanvasRenderingContext2D
+  readonly sprites = new SpriteCache()
   scale = 1
 
   constructor(readonly canvas: HTMLCanvasElement) {
@@ -49,7 +49,7 @@ export class Renderer {
     this.canvas.style.imageRendering = 'pixelated'
   }
 
-  draw(w: World, cam: Camera): void {
+  draw(w: World, cam: Camera, anim: Anim): void {
     const { ctx } = this
     ctx.imageSmoothingEnabled = false
     // Everything below floors its coordinates: sub-pixel state, integer pixels.
@@ -61,7 +61,7 @@ export class Renderer {
 
     this.drawTiles(w, ox, oy)
     this.drawPickups(w, ox, oy)
-    this.drawPlayer(w, ox, oy)
+    this.drawPlayer(w, ox, oy, anim)
     this.drawHud(w)
   }
 
@@ -139,25 +139,41 @@ export class Renderer {
     }
   }
 
-  private drawPlayer(w: World, ox: number, oy: number): void {
+  private drawPlayer(w: World, ox: number, oy: number, anim: Anim): void {
     const { ctx } = this
     const p = w.player
-    if (!p.alive) return
     // Invulnerability flickers, which also communicates that a hit landed.
-    if (p.iframes > 0 && (w.frame >> 1) % 2 === 0) return
+    if (p.alive && p.iframes > 0 && (w.frame >> 1) % 2 === 0) return
 
-    const x = Math.floor(p.x - ox)
-    const y = Math.floor(p.y - oy)
-    ctx.fillStyle = TIER_COLOUR[p.tier]!
-    ctx.fillRect(x, y, p.w, p.h)
-    ctx.fillStyle = TIER_EDGE[p.tier]!
-    ctx.fillRect(x, y, p.w, 2)
-    // Eye, so facing is obvious at a glance.
-    ctx.fillRect(p.facing > 0 ? x + p.w - 3 : x + 1, y + 3, 2, 2)
+    const frame = frameFor(anim, p.tier)
+    const palette = paletteFor(p.tier)
 
-    if (p.dashFrames > 0) {
-      ctx.fillStyle = p.tier === CHARGED_TIER ? '#e761ef' : '#00e5cc'
-      ctx.fillRect(x - Math.sign(p.vx) * 4, y + 2, p.w, p.h - 4)
+    // The sprite is larger than the hitbox by design (PRD §12.4), so it is
+    // drawn centred on the box rather than aligned to it.
+    const x = Math.floor(p.x - ox + (p.w - frame.w) / 2)
+    const y = Math.floor(p.y - oy + (p.h - frame.h) / 2)
+
+    if (p.dashFrames > 0) this.drawInkTrail(p, x, y, frame.w, frame.h)
+    drawSprite(ctx, this.sprites.get(frame, p.facing < 0, palette), x, y)
+  }
+
+  /** A dash leaves a fading trail behind it — opaque black while Charged. */
+  private drawInkTrail(
+    p: { vx: number; vy: number; tier: number },
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): void {
+    const { ctx } = this
+    const charged = p.tier === CHARGED_TIER
+    const len = Math.hypot(p.vx, p.vy) || 1
+    const ux = -p.vx / len
+    const uy = -p.vy / len
+    for (let i = 1; i <= 3; i++) {
+      const fade = charged ? 0.85 - i * 0.15 : 0.4 - i * 0.1
+      ctx.fillStyle = charged ? `rgba(10,6,20,${fade})` : `rgba(0,229,204,${fade})`
+      ctx.fillRect(Math.floor(x + ux * i * 4 + w / 4), Math.floor(y + uy * i * 4 + h / 4), w / 2, h / 2)
     }
   }
 
