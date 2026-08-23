@@ -4,7 +4,7 @@
 **Genre:** 2D side-scrolling action platformer
 **Player character:** Nib, a squid
 **Scope:** 5 levels, one boss each
-**Status:** Draft v1.0 — design locked, not yet built
+**Status:** Draft v1.1 — design locked, not yet built
 **Owner:** richard.andrew.young@gmail.com
 **Last updated:** 2026-08-23
 
@@ -32,7 +32,7 @@ It is built as a **standalone project**: its own repository, its own build, zero
 
 ### 1.3 Goals
 
-- G1 — A player who finishes all five levels should have died 30–80 times and never once felt cheated.
+- G1 — A player who finishes all five levels should have died 25–60 times and never once felt cheated.
 - G2 — Movement should feel good in a **grey box with no enemies**. If the vertical slice isn't fun with nothing in it, the physics are wrong.
 - G3 — Complete run time: **20–30 minutes** for a competent player who already knows the levels; **2–4 hours** for a first-timer including deaths.
 - G4 — Total download under **1.5 MB**, cold load under **1 second**, locked 60 fps on integrated graphics.
@@ -85,7 +85,7 @@ Nib does not talk. His personality is entirely in his animation: he *hovers* rat
 
 The single most important system in the game.
 
-- Nib has an **ink meter of 3 pips**, drawn as three teardrops beside his portrait in the HUD.
+- Nib has an **ink meter of 3 pips**, drawn as three teardrops beside his portrait in the HUD. (2 pips while **Spent** — see §4.4. The meter *is* the health bar.)
 - **Ink Dash** costs 1 pip: an instantaneous burst in one of **8 directions**, usable in mid-air, once per direction-press. Not a double jump — a *directional* burst that overrides current velocity.
 - Pips refill on a timer: **1 pip per 45 frames (0.75 s)** while grounded, **1 per 20 frames (0.33 s)** while in water, **0 while airborne over a pit**. Airborne refill is deliberately disabled so hang-time can't be farmed.
 - **Stomping an enemy instantly refunds 1 pip**, capped at max. This is the core of chained aerial traversal: bounce → dash → bounce.
@@ -118,8 +118,16 @@ The single most important system in the game.
                 └─────────┘         └─────────┘
 
   Orthogonal states: WATER (replaces GROUND/RISE/FALL physics),
-  CLING (World 2 upgrade), HURT (12 frames i-frames + knockback),
+  CLING (World 2 upgrade), HURT (90 i-frames + knockback),
   DEAD (locked, 90-frame animation, then respawn).
+
+  Size tier, orthogonal to all of the above:
+
+       ┌──────────┐   hit    ┌──────────┐   hit    ┌──────────┐
+       │   FULL   │─────────▶│  SPENT   │─────────▶│   DEAD   │
+       │ 3 pips   │          │ 2 pips   │          └──────────┘
+       │ 12×14 box│◀─────────│ 10×10 box│
+       └──────────┘ Ink Bulb └──────────┘
 ```
 
 ### 4.3 Physics constants
@@ -173,6 +181,21 @@ All values in **pixels per frame** at a fixed **60 Hz** timestep. These are the 
 | `WATER_ENTRY_DAMP` | 0.40 | Vertical velocity multiplier on entry — no cannonballing through a pool |
 | `CURRENT_FORCE` | 0.06–0.30 | Per-tile authored, pushes on an axis |
 
+#### Spent Nib (small) — deltas from Full
+
+Only these values change. Everything not listed is identical, so the game never feels like two different games.
+
+| Constant | Full | Spent | Note |
+|---|---|---|---|
+| Sprite / hitbox | 16×16 / 12×14 | **12×12 / 10×10** | Fits a 1-tile-high gap and a 1-tile-wide shaft |
+| `INK_MAX` | 3 | **2** | The meter is the health bar |
+| `GRAVITY` | 0.42 | **0.40** | Lighter |
+| `JUMP_IMPULSE` | −4.60 | **−4.75** | Slightly higher — small is not strictly worse |
+| `RUN_MAX` | 2.60 | **2.70** | |
+| Crumble tile hold | 24 frames | **36 frames** | Less weight on the sand |
+
+Everything else — accelerations, friction, dash speed, dash lock, coyote and buffer windows — is unchanged. **Feel guarantees 1, 4 and 5 hold in both tiers**; guarantees 2 and 3 are stated for Full only, because they assume a 3-pip budget.
+
 #### Feel guarantees
 
 These are the invariants tuning must preserve. If a constant change breaks one, the change is wrong.
@@ -183,13 +206,33 @@ These are the invariants tuning must preserve. If a constant change breaks one, 
 4. Nib comes to a full stop from run speed in **≤ 12 frames**.
 5. Time from jump press to leaving the ground is **1 frame**. No wind-up, ever.
 
-### 4.4 Damage & death
+### 4.4 Damage & size tiers
 
-- Nib has **no health bar**. One hit is a death — classic, unforgiving, and it makes every enemy matter. (This is the sharpest expression of the Classic NES difficulty choice. It is also the single most likely thing to need revisiting after playtest; see §16.)
-- Exception: the **Heat Shell** upgrade (World 4) grants one absorbable hit per checkpoint, consumed visibly.
-- Death → 90-frame animation (Nib deflates, ink clouds out, body drifts up) → respawn at last checkpoint, lives −1.
-- Falling into a pit, being crushed, or touching a hazard are all deaths. No fall damage otherwise — there is no killing height.
-- **Invulnerability after respawn:** 60 frames, Nib flickers.
+Nib has **no health bar, because the ink meter is the health bar.** He exists in two size tiers, Mario-style, and getting hit drops him a tier by literally blowing his ink out.
+
+| Tier | Size | Ink | On hit |
+|---|---|---|---|
+| **Full** | 16×16 sprite, 12×14 hitbox | 3 pips | → **Spent** |
+| **Spent** | 12×12 sprite, 10×10 hitbox | 2 pips | → **death** |
+
+**Why the tier and the resource are the same thing.** A separate hit-points bar would sit beside the ink system; this *is* the ink system. Getting hit costs you the exact currency the level is asking you to budget, so a mistake tightens the next jump instead of merely ticking a counter down. It also means the game needs **no new HUD element** — the third pip slot simply draws as a broken outline (§11.2), and the player reads their own health in the place they are already looking mid-air.
+
+**Taking a hit while Full:**
+- Nib expels an ink cloud, snaps to the Spent sprite, and takes 8 px of knockback away from the source.
+- **90 frames of invulnerability**, flickering — enough to walk out of a bad spot.
+- The expelled cloud **stuns every enemy within 2 tiles for 30 frames**. This is deliberate: it makes the classic Mario failure of being hit twice in half a second essentially impossible, and it is thematically exact.
+
+**Taking a hit while Spent:** death → 90-frame animation (Nib deflates, ink clouds out, the body drifts up) → respawn at the last checkpoint, lives −1.
+
+**Restoring to Full — the Ink Bulb.** A bioluminescent bulb, the mushroom analog. Roughly **4–6 per level**, always with one within ~15 seconds of travel after each checkpoint, plus hidden ones. Collecting a bulb while already Full instantly refills the ink meter and scores 1,000.
+
+**Respawning always restores Full.** Mario respawns you small; we do not. A section authored for a 3-pip budget is not honestly completable on 2, so respawning Spent would hand the player an unfair room through no new mistake of their own — a direct violation of the honest-difficulty pillar. Checkpoints are already sparse; that is where the difficulty lives.
+
+**What ignores tiers entirely.** Pits, crushing, magma, Hookline contact, urchin spikes, and the World 5 pressure crush are **instant death at any size**, exactly as in Mario. Enemy contact and enemy projectiles cost a tier. This split is what keeps the world's hazards readable: geometry kills, creatures cost.
+
+**Being small is not purely worse.** Spent Nib fits through **1-tile gaps** that Full Nib cannot, jumps marginally higher, and sits on collapsing sand 50% longer. Levels use this for optional shortcuts, one pearl (§7.6), and speedrun routing — a runner may choose to stay Spent through a section.
+
+No fall damage — there is no killing height. **Invulnerability after respawn:** 60 frames.
 
 ### 4.5 Lives, checkpoints, continues
 
@@ -197,6 +240,7 @@ These are the invariants tuning must preserve. If a constant change breaks one, 
 |---|---|
 | Starting lives | 3 |
 | Extra life | Every 100 **shells** collected; also 1 per hidden **pearl** |
+| Ink Bulbs per level | 4–6, one within ~15 s after each checkpoint |
 | Checkpoints per level | **2** (roughly ⅓ and ⅔ through) — sparse, NES-style |
 | Boss checkpoint | 1, immediately before the boss door |
 | Game Over | Lives exhausted → Game Over screen |
@@ -252,6 +296,8 @@ Each enemy exists to teach or test one thing. If two enemies test the same thing
 
 ### 6.2 Hazards
 
+**Hazards are instant death at any size tier** (§4.4) — geometry kills, creatures cost. The one exception is the ember dropped by a Cinder Moth, which is an enemy projectile and costs a tier.
+
 | Hazard | Worlds | Behaviour |
 |---|---|---|
 | **Urchin spikes** | all | Static instant death. Always drawn on a contrasting tile so they read at a glance. |
@@ -295,6 +341,8 @@ Five levels, one per world. Target **3–5 minutes** each for a clean run, **8�
 
 Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go left), one requiring a hard optional route, one **requiring an upgrade from a later world** (see §8.5).
 
+**Ink Bulbs and small-only passages.** Every level places 4–6 Ink Bulbs (§4.4), at least one shortly after each checkpoint and at least one hidden. Every level also contains **1–2 one-tile passages that only Spent Nib fits through** — optional shortcuts and speedrun routes, never mandatory, with exactly one pearl behind one in the whole game (W5 ②). A player who never gets hit never needs them; a player who does gets handed a small consolation.
+
 ### 7.2 Level 1 — The Tide Pools
 
 **Palette:** warm sun-bleached coral, turquoise shallows, cream sand.
@@ -306,6 +354,7 @@ Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go l
 | A1 | Empty sunlit shelf. One 6-tile gap that is **impossible to jump** — the game's first lesson is that jumping alone is not enough. Dash prompt appears once. |
 | A2 | Three ascending ledges requiring up-dash. Shells laid on the correct arc as a breadcrumb trail. |
 | A3 | First Snapper, alone, on flat ground. First stomp. Ink pip refunds visibly. |
+| A4 | **Ink Bulb taught before it is needed.** A Snapper on a ledge is positioned so most players take their first hit here and shrink; a bulb sits in plain sight 4 tiles on. Players who don't get hit collect it as points and learn what it looks like anyway. |
 | ◆CP1 | Conch on a rock. |
 | B1 | Tide pool — first water. Swim controls introduced with no threat present. Buoyancy taught by a single vertical shaft. |
 | B2 | Drifters over a pit. Not stompable. The only route is dash-past, spending 2 pips with 1 in reserve. |
@@ -398,7 +447,7 @@ Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go l
 | ◆CP3 | Boss door. The only checkpoint of the last third. |
 | BOSS | The Kraken. |
 
-**Pearls:** ① in the A1 descent, in total darkness, findable only by the sound cue (§10.3). ② in the B1 vent chamber, behind the last vent. ③ in C2, inside a Lightless's own light radius — you have to walk into the thing that kills you.
+**Pearls:** ① in the A1 descent, in total darkness, findable only by the sound cue (§10.3). ② in the B1 vent chamber, behind the last vent, **through a 1-tile crack that only Spent Nib fits through** — in the abyss, on 2 pips, which means most players must deliberately take a hit to reach it. The only pearl in the game gated on being small. ③ in C2, inside a Lightless's own light radius — you have to walk into the thing that kills you.
 
 ### 7.7 Difficulty curve
 
@@ -441,6 +490,8 @@ The **saw-tooth is mandatory**. A monotonic ramp exhausts the player. Every worl
 | Stomp chain (per link, no ground contact) | 100 → 200 → 400 → 800 → 1000 (cap) |
 | Pearl | 5,000 |
 | Level clear | 1,000 + (remaining time in seconds × 50) |
+| Ink Bulb collected while already Full | 1,000 |
+| No-damage level clear <small>(never dropped to Spent)</small> | 5,000 |
 | No-death level clear | 10,000 |
 | Boss defeated | 5,000 |
 
@@ -474,10 +525,10 @@ One permanent upgrade per world, granted on world clear (except Deep Jet, found 
 | **Ink Shot** | Clear W1 | Ranged ink bolt. 1 pip. Kills Drifter/Whipkelp/Bone Shrimp, stuns Eel 90f, breaks kelp knots. `speed 4.0, arc gravity 0.12`. | W1 (none), W2 ② |
 | **Cling** | Clear W2 | Grip any wall for 60 frames, then slide at 1.2 px/f. Re-grip costs 1 pip. | W3 ①, W1 ② (alternate route) |
 | **Ink Bomb** | Clear W3 | Lobbed charge, 20-frame fuse, 3-tile radius. 1 pip. Breaks cracked terrain, kills anything unarmored. | W2 ③, W4 ② |
-| **Heat Shell** | Clear W4 | A hardened ink layer. Absorbs **one** contact hit per checkpoint; visibly cracks and is gone. Also grants 90 extra frames in superheated water. | W3 ③, W4 ③ |
+| **Heat Shell** | Clear W4 | A hardened ink layer. **Immunity to heat**: superheated water, Cinder Moth embers, and magma splash no longer harm Nib, and he survives standing in magma itself for 90 frames. Also lets him pass heat-fused debris. | W3 ③, W4 ③ |
 | **Deep Jet** | Mid-W5 | `INK_MAX` 3 → 4, `DASH_COOLDOWN` 10 → 6, `DASH_SPEED` +0.6. | W1 ③, W5 ①②③ |
 
-**Design note:** Heat Shell breaks the one-hit-kill rule deliberately, and only from World 4 onward — the point in the run where a player has earned a little mercy. It is not a health bar; it never regenerates mid-section.
+**Design note:** Heat Shell used to absorb a hit. Now that the size tiers (§4.4) do that job, it is a **pure traversal upgrade** instead — no upgrade in the game grants extra hit points, so the two tiers stay the whole of the damage model and there is never a question of how many hits Nib can take. See §16 Q1 for the optional third tier we deliberately did *not* build.
 
 ### 8.6 Unlockable characters *(Phase 2)*
 
@@ -488,7 +539,7 @@ Specced now, built in the phase after the base game ships. Each is a **movement 
 | **Nib** (squid) | Default | The baseline all levels are tuned against. |
 | **Octo** (octopus) | Collect all 15 pearls | `INK_MAX` 4, `WALK_MAX` 1.3, `JUMP_IMPULSE` −4.1, **native Cling with no pip cost and no 60-frame limit**. Slower and floatier; trades speed for total wall control. Trivialises some vertical rooms, struggles in every current. |
 | **Cuttle** (cuttlefish) | Beat the game in under 25 minutes | Hold Jump at fall apex to **glide** at `TERMINAL_FALL 1.4`. `DASH_SPEED` 4.2 (weaker), `INK_MAX` 2. A control character — long, precise, low-power. |
-| **Nautilus** | Beat the game without dying | Armored: **absorbs one hit per checkpoint** natively. `GRAVITY` 0.52, and **cannot dash upward** — only the six non-upward directions. The tank. Some vertical rooms require completely different routes. |
+| **Nautilus** | Beat the game without dying | **Three tiers instead of two** — his shell cracks visibly at each stage before he is exposed. `GRAVITY` 0.52, and **cannot dash upward** — only the six non-upward directions. He also never shrinks small enough for a 1-tile gap, so every small-only shortcut is closed to him. The tank: more hits, fewer routes. |
 
 Rules:
 - Character select on the title screen once any is unlocked; the choice persists.
@@ -560,13 +611,16 @@ Corrupt or unparseable save → fall back to defaults and show a single non-bloc
 | Nib — swim | 16×16 | 4 |
 | Nib — cling | 16×16 | 2 |
 | Nib — hurt / death | 16×16 | 1 + 6 |
+| **Spent Nib — full set** | 12×12 | **~16** (idle, walk, rise, fall, dash, swim, cling, death) |
+| **Shrink transition** | 16×16 | 4, plus the ink-cloud burst |
+| Ink Bulb | 16×16 | 3 (pulse) |
 | Each standard enemy | 16×16 | 2–4 |
 | Puffer / Magma Snail | 24×16 | 4–6 |
 | Bosses | 48×48 to 128×96 | 8–16 |
 | Tiles per world | 16×16 | ~24 |
 | UI glyphs & font | 8×8 | full ASCII |
 
-**Total estimate: ~420 sprite frames.** At ~256 bytes each as packed nibble arrays, well under 200 KB uncompressed.
+**Total estimate: ~445 sprite frames.** At ~256 bytes each as packed nibble arrays, well under 200 KB uncompressed. The Spent-tier set is the single largest addition from v1.1 and is drawn from the same 4-colour sub-palette as Full Nib, one shade paler.
 
 ### 9.3 World palettes
 
@@ -594,6 +648,7 @@ Non-negotiable, because they cost little and carry most of the game's feel:
 - Stomping freezes the frame for **3 frames** (hitstop) and squashes the enemy sprite vertically before the death animation.
 - Collecting a shell pops the sprite up 4 px and fades over 12 frames.
 - Death ink-clouds the screen from Nib's position, holds 30 frames, then wipes.
+- **Shrinking** is 4 frames of hitstop, a radial ink burst, and the 90 i-frames rendered as a 4-frame flicker. Growing from an Ink Bulb reverses it with a rising two-note sting.
 - Taking the last pip flashes the meter and desaturates Nib's mantle by 30%.
 
 ---
@@ -624,7 +679,7 @@ This keeps the bundle tiny, avoids licensing entirely, and produces a sound that
 
 ### 10.3 SFX
 
-Jump · swim stroke · **ink dash (the game's signature sound — a wet pressurised burst)** · dash into wall (bonk) · stomp · enemy death · ink shot · ink bomb · cling grip · cling slip · shell pickup (pitch rises with combo) · **pearl (a distinct 3-note chime audible from 6 tiles away, even off-screen — this is a gameplay mechanic, not decoration)** · checkpoint · hurt/death · boss hit · boss death · magma rumble · pressure warning (a heartbeat that quickens) · menu move/confirm/back.
+Jump · swim stroke · **ink dash (the game's signature sound — a wet pressurised burst)** · dash into wall (bonk) · stomp · enemy death · ink shot · ink bomb · cling grip · cling slip · **shrink (a descending wet gasp)** · **grow from Ink Bulb (rising two-note sting)** · shell pickup (pitch rises with combo) · **pearl (a distinct 3-note chime audible from 6 tiles away, even off-screen — this is a gameplay mechanic, not decoration)** · checkpoint · hurt/death · boss hit · boss death · magma rumble · pressure warning (a heartbeat that quickens) · menu move/confirm/back.
 
 ### 10.4 Audio policy
 
@@ -667,7 +722,7 @@ Minimal, top strip, 16 px tall, never overlapping playfield geometry:
  └──────────────────────────────────────────────────────────────┘
 ```
 
-- The ink meter is the largest HUD element and sits closest to the playfield — it is the thing the player must read mid-air.
+- The ink meter is the largest HUD element and sits closest to the playfield — it is the thing the player must read mid-air. **It doubles as the health display:** while Spent, the third pip slot draws as a broken outline (`●●⊘`), so size tier costs no extra HUD real estate and is read in the place the player is already looking.
 - Timer only renders if enabled in Options.
 - HUD fades to 40% opacity when Nib is within 24 px of it.
 
@@ -820,7 +875,7 @@ Coordinates in the `entities` array are **tile coordinates**, not pixels. A pars
 |---|---|---|
 | Physics & collision units | Vitest | 90% — swept AABB, one-way tiles, water entry, dash carryover, and every §4.3 feel guarantee asserted as a test |
 | Save schema & migration | Vitest | 100% — including corrupt-blob fallback |
-| Level validation | Vitest | Every level parses; every level is provably completable by an automated reachability check; every pearl reachable given its stated upgrade |
+| Level validation | Vitest | Every level parses; every level is provably completable by an automated reachability check **at both size tiers** — a section reachable only on 3 pips is a bug, since a player can arrive Spent; every pearl reachable given its stated upgrade and tier |
 | Score & timer logic | Vitest | 100% |
 | Determinism | Vitest | A recorded input sequence replayed twice produces byte-identical world state. This test protects speedrun timing and ghosts. |
 | Feel | Human playtest | Not automatable. 3 testers per milestone. |
@@ -868,7 +923,8 @@ M1–M8 is the ship. M9 follows.
 
 | Risk | Impact | Likelihood | Mitigation |
 |---|---|---|---|
-| **One-hit death is too punishing** and testers quit at World 2 | High | Medium | M2/M3 playtest is the checkpoint. Mitigations in priority order: (1) more checkpoints, (2) Heat Shell earlier, (3) a 2-hit "ink layer" as baseline. Do **not** first reach for enemy nerfs — the enemies are what make the levels legible. |
+| **Two tiers make the game too soft**, and the Classic NES promise doesn't land | High | Medium | The difficulty budget now lives in the **sparse checkpoints and the 3 continues**, not in the hit count. If M3 playtest reads as easy, tighten in this order: (1) fewer Ink Bulbs, (2) remove the Spent-tier jump bonus, (3) drop to 2 continues. Do **not** first reach for enemy buffs — the enemies are what make the levels legible. |
+| **The ink-cloud stun trivialises crowds** — players farm hits to clear rooms | Medium | Medium | The 30-frame stun is tuned to prevent double-hits, not to be a weapon. If it becomes a strategy, cut the radius to 1 tile before cutting the duration; the anti-double-hit property is the part that must survive. |
 | **Ink dash isn't fun** | Fatal | Low | M2 is an explicit go/no-go gate for exactly this. If the grey box isn't fun, stop and re-tune before any content is authored. |
 | **Code-drawn pixel art takes longer than expected** | Medium | **High** | Authoring ~420 frames by hand in arrays is slow. Mitigation: build a tiny in-repo sprite editor page in M1 that reads/writes the TS array format directly. Half a day that saves a week. |
 | **Runtime chiptune synth sounds bad** | Medium | Medium | Prototype the APU in M1 with one melody before committing to 11 tracks. Fallback: fewer, longer, simpler tracks. |
@@ -881,7 +937,7 @@ M1–M8 is the ship. M9 follows.
 
 ## 16. Open questions
 
-1. **Does one-hit death survive contact with real players?** Deliberately unresolved until M3 playtest. The mitigation ladder in §15 is pre-agreed so we don't re-litigate the whole design under pressure.
+1. **Should there be a third tier?** Mario has small → super → fire flower; we have Spent → Full. A third **Shelled** tier (armored, heat-immune, drops to Full when hit) would complete the pattern and give World 4 a genuine power fantasy — but it would also absorb a third of the game's difficulty and make the "meter is the health bar" reading fuzzier. Currently specced as **two tiers only**, with Heat Shell demoted to a pure traversal upgrade (§8.5).
 2. **Is 5 levels enough game?** ~25 minutes for a clean run is short by modern standards, long by NES standards, and the meta systems (§8) are the intended answer. Revisit after M8.
 3. **Should the world map allow free replay of cleared levels, or only linear progress?** Backtracking for pearls (§8.5) implies free replay. Confirm.
 4. **Does the run timer include boss fights?** Assumed yes. Speedrun communities care; state it before anyone routes around it.
@@ -918,11 +974,23 @@ export const WATER = {
   SWIM_STROKE: -1.9, SWIM_MAX_X: 1.8, ENTRY_DAMP: 0.4,
 } as const;
 
+// Size tiers — only these values differ; everything else is shared.
+export const TIERS = {
+  full:  { inkMax: 3, box: [12, 14], gravity: 0.42, jump: -4.60, runMax: 2.60, crumbleHold: 24 },
+  spent: { inkMax: 2, box: [10, 10], gravity: 0.40, jump: -4.75, runMax: 2.70, crumbleHold: 36 },
+} as const;
+
 export const RULES = {
   START_LIVES: 3, CONTINUES: 3,
   SHELLS_PER_LIFE: 100,
   CHECKPOINTS_PER_LEVEL: 2,
-  RESPAWN_IFRAMES: 60, HURT_IFRAMES: 12,
+  INK_BULBS_PER_LEVEL: [4, 6],
+  RESPAWN_IFRAMES: 60,
+  HURT_IFRAMES: 90,            // on shrink — long enough to walk out of a bad spot
+  HURT_KNOCKBACK: 8,           // px, away from the source
+  SHRINK_STUN_FRAMES: 30,      // expelled ink cloud stuns enemies...
+  SHRINK_STUN_RADIUS: 2,       // ...within this many tiles
+  RESPAWN_TIER: "full",        // never respawn Spent — see §4.4
   DEATH_ANIM_FRAMES: 90,
 } as const;
 
@@ -946,7 +1014,8 @@ export const DISPLAY = {
 | Characters (incl. Phase 2) | 4 |
 | Music tracks | 11 |
 | SFX | ~24 |
-| Sprite frames | ~420 |
+| Sprite frames | ~445 |
+| Size tiers | 2 (3 for Nautilus) |
 | Tiles | ~120 (5 worlds × ~24) |
 | Screens | 8 |
 
@@ -958,6 +1027,8 @@ export const DISPLAY = {
 | Signature move | 8-way ink jet dash | Tentacle grapple; swim/float switch; suction cling | A *budget* of bursts creates better puzzles than a binary ability |
 | Art | Code-drawn pixel art | Vector; emoji/CSS; sourced sprite sheets | No pipeline, no licensing, authentic era feel |
 | Difficulty | Classic NES | Kid-friendly; selectable modes; speedrun-focused | Honest, short, memorable — with Assist Mode as the accessibility valve |
+| Damage model | Two size tiers, Mario-style *(v1.1, was one-hit death)* | One-hit death; a health bar; three tiers | The tier and the ink budget are the **same resource**, so a hit tightens the next jump instead of ticking a counter. Difficulty moves into sparse checkpoints, where it belongs. |
+| Ink capacity when small | 2 pips | 3 pips regardless of size | If being small cost nothing but a hitbox, the tier would be free. Losing a pip is the cost that makes an Ink Bulb worth crossing a room for. |
 | Worlds | Ocean descent | Fish-out-of-water; Mario mapping; ink surrealism | Descent gives an emotional arc a level list can't |
 | Input | Keyboard only | Gamepad; touch; all three | Tuning focus; touch would compromise precision |
 | Meta | Pearls + score + speedrun + upgrades + characters | Any single one | They reinforce each other: upgrades enable pearls, pearls unlock characters, characters reset the speedrun |

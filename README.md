@@ -12,7 +12,9 @@ Five hand-authored levels, one boss each. You play Nib, a squid whose signature 
 **eight-directional ink jet dash** costing one of three pips from a slowly-refilling ink meter.
 Every jump puzzle and every boss is a question about where you spend those pips.
 
-- One-hit deaths, 3 lives, 2 checkpoints per level, 3 continues. Classic and unforgiving.
+- Two size tiers, Mario-style: a hit blows Nib's ink out and shrinks him from 3 pips to 2, and a
+  second hit kills. The ink meter **is** the health bar. 3 lives, 2 sparse checkpoints per level,
+  3 continues.
 - 15 hidden pearls, per-level speedrun timers with ghosts, arcade scoring, five permanent
   ink upgrades that open routes back through earlier worlds.
 - Everything authored in code: pixel sprites as TypeScript arrays, chiptune synthesised at
