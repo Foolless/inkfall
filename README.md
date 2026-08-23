@@ -4,7 +4,8 @@ A NES-difficulty 2D platformer about a squid descending from a sunlit tide pool 
 
 **Status:** design phase — documentation only, no code yet. Start with the PRD.
 
-📄 **[docs/PRD.md](docs/PRD.md)** — the full product requirements document
+📄 **[docs/PRD.md](docs/PRD.md)** — what the game is
+🛠️ **[docs/PLAN.md](docs/PLAN.md)** — how it gets built: four phases, checkpoints, testing, hosting
 
 ## The short version
 
@@ -41,9 +42,16 @@ how v1 is built.
 
 ## Building it
 
-Nothing to build yet. Milestone M1 in the PRD creates the project skeleton; M2 is the
-vertical slice, and it is an explicit go/no-go gate — if the ink dash isn't fun in an empty
-grey box, the design stops there before any content is authored.
+Nothing to build yet. [PLAN.md](docs/PLAN.md) breaks the work into four phases, each ending
+with a playable build at a public URL and a gate that a machine can't pass for you:
+
+1. **Engine & Feel** — a deployable grey box where Nib moves perfectly and nothing else
+   exists. Its gate is a genuine go/no-go: if the ink dash isn't fun with no content around
+   it, the project stops there rather than at Phase 4.
+2. **One Real Level** — World 1 complete, proving the whole pipeline once instead of five
+   times.
+3. **All Five Levels** — the full descent, completable start to finish.
+4. **Meta & Ship** — pearls, scoring, speedrun timers, audio, polish, accessibility.
 
 ## Contributing
 
