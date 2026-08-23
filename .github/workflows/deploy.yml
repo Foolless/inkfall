@@ -28,6 +28,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+
+      # Deploy runs in parallel with CI, so without these a commit whose tests
+      # fail could still reach the live URL. The public build must never be
+      # something that would not have passed review.
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test
+
       - name: Build for Pages
         # A project site serves from /inkfall/, so assets need that base path.
         run: npm run build
