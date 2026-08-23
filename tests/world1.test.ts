@@ -5,7 +5,8 @@ import { chapterOf } from '../src/content/chapters.js'
 import { tilesetOf } from '../src/content/tilesets/index.js'
 import { Tile, tileAt } from '../src/game/tilemap.js'
 import { createWorld, HINT_FRAMES, update } from '../src/game/world.js'
-import { RULES } from '../src/game/constants.js'
+import { FULL, RULES, SPENT } from '../src/game/constants.js'
+import { setTier } from '../src/game/player.js'
 import { blank, TILE } from './helpers.js'
 
 const level = loadCampaignLevel(tidepools)
@@ -142,6 +143,40 @@ describe('the beats', () => {
     }
     const gauntlet = holes.slice(-4)
     expect(Math.max(...gauntlet)).toBe(gauntlet[gauntlet.length - 1])
+  })
+})
+
+describe('the Spent-only pocket', () => {
+  /** §7.1: one or two per level, optional, and never in the way. */
+  test('there is a crack, and it is in the Puffer tunnel', () => {
+    let cracks = 0
+    for (let y = 0; y < level.map.height; y++) {
+      for (let x = 0; x < level.map.width; x++) if (tileAt(level.map, x, y) === Tile.CRACK) cracks++
+    }
+    expect(cracks).toBe(1)
+    expect(tileAt(level.map, 168, 19)).toBe(Tile.CRACK)
+  })
+
+  test('shells sit behind it, so being small is worth something', () => {
+    const behind = level.entities.filter((e) => e.type === 'shell' && e.y > 19)
+    expect(behind.length).toBeGreaterThan(0)
+  })
+
+  test('Spent Nib drops through it and Full Nib stands on it', () => {
+    for (const [name, tier, expected] of [
+      ['Spent', SPENT, true],
+      ['Full', FULL, false],
+    ] as const) {
+      const w = createWorld(level)
+      setTier(w.map, w.player, tier)
+      const p = w.player
+      p.x = 168 * TILE + 3
+      p.y = 18 * TILE
+      p.vy = 0
+      for (let i = 0; i < 40; i++) update(w, blank())
+      const fellThrough = p.y > 19 * TILE
+      expect(fellThrough, `${name} Nib`).toBe(expected)
+    }
   })
 })
 

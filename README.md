@@ -46,7 +46,7 @@ how v1 is built.
 ```bash
 npm install
 npm run dev       # World 1, at http://localhost:5173
-npm run verify    # typecheck + lint + 521 unit tests + build + bundle size
+npm run verify    # typecheck + lint + 529 unit tests + build + bundle size
 npm run smoke     # 8 Playwright browser tests
 ```
 
@@ -81,11 +81,15 @@ Four things worth knowing before touching this code, all written up in
   specified height, which made bounce chains physically impossible and looked like a
   level-design problem.
 - **A one-tile gap does not exclude Full Nib.** With 16px tiles and a 12×14 hitbox, both
-  drawn tiers fit through one — so the "small-only passage" idea in PRD §4.4 and §7.1 has no
-  geometry behind it yet. §16 lays out the options.
+  drawn tiers fit through one, so the "small-only passage" idea in PRD §4.4 and §7.1 had no
+  geometry behind it. It is now a `CRACK` tile — solid to everything but a small body — and
+  a test proves no crack is ever on the critical path.
+- **A jump pressed during a dash was silently eaten**, because the dash locks for ten frames
+  and the jump buffer only held six.
 - **The reachability solver is the level designer's editor**, not just a CI check. It caught
   a pearl that was supposed to need a World 5 upgrade and did not.
-- **2.7's judgement call is open.** The synth is built and tested; nobody has listened to it.
+- **The synth passes.** 2.7's judgement call has been made by ear, so Phase 4 can commit to
+  all eleven tracks.
 
 ## Contributing
 

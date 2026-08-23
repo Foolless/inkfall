@@ -145,6 +145,32 @@ export const slick = sprite('shallowsSlick', ALGAE, [
   '1111111111111111',
 ])
 
+/**
+ * A crack in the rock. Only Spent Nib fits through one.
+ *
+ * It has to read as *passable-if-small* from a screen away, so it is drawn as a
+ * gap with broken edges rather than as decorated wall — the eye should ask
+ * "could I get through that?" before the player ever tries.
+ */
+export const crack = sprite('shallowsCrack', SAND, [
+  '1111111111111111',
+  '1111111111111111',
+  '2111111111111112',
+  '2211111111111122',
+  '0221111111111220',
+  '0022111111112200',
+  '0000221111220000',
+  '0000000000000000',
+  '0000000000000000',
+  '0000221111220000',
+  '0022111111112200',
+  '0221111111111220',
+  '2211111111111122',
+  '2111111111111112',
+  '1111111111111111',
+  '1111111111111111',
+])
+
 export interface Tileset {
   id: string
   solidTop: SpriteDef
@@ -153,6 +179,7 @@ export interface Tileset {
   crumble: SpriteDef
   hazard: SpriteDef
   slick: SpriteDef
+  crack: SpriteDef
   /**
    * Water is painted rather than blitted: it is translucent, so what is behind
    * it has to show through. A sprite would have to be opaque or carry an alpha
@@ -171,8 +198,9 @@ export const shallows: Tileset = {
   crumble,
   hazard: urchin,
   slick,
+  crack,
   water: { body: SHALLOWS.SHALLOW_DEEP, surface: SHALLOWS.FOAM, current: SHALLOWS.SHALLOW },
   sky: '#0d3f4d',
 }
 
-export const SHALLOWS_FRAMES: readonly SpriteDef[] = [sandTop, sandFill, oneway, crumble, urchin, slick]
+export const SHALLOWS_FRAMES: readonly SpriteDef[] = [sandTop, sandFill, oneway, crumble, urchin, slick, crack]
