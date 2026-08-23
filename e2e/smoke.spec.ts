@@ -8,14 +8,14 @@ import { expect, test } from '@playwright/test'
  * the class of bug unit tests structurally cannot: a broken module graph, a
  * canvas that never gets a context, a base path that 404s its own bundle.
  */
-test('the grey box loads and runs', async ({ page }) => {
+test('the game loads and runs', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   page.on('pageerror', (e) => errors.push(e.message))
 
   await page.goto('/')
   await expect(page.locator('canvas#game')).toBeVisible()
-  await page.keyboard.press('Space') // past the title, into the grey box
+  await page.keyboard.press('Space') // past the title, into World 1
 
   // The canvas must be at the internal resolution, integer-scaled by CSS.
   const size = await page.locator('canvas#game').evaluate((el: HTMLCanvasElement) => ({
@@ -32,7 +32,7 @@ test('the grey box loads and runs', async ({ page }) => {
 })
 
 test('the simulation advances and responds to the keyboard', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?level=greybox')
   await page.waitForFunction(() => window.__inkfall !== undefined)
   await page.keyboard.press('Space')
   await page.waitForFunction(() => (window.__inkfall?.frame() ?? 0) > 10)
@@ -51,7 +51,7 @@ test('the simulation advances and responds to the keyboard', async ({ page }) =>
 })
 
 test('respawn restores Full — never Spent, never Charged', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?level=greybox')
   await page.waitForFunction(() => window.__inkfall !== undefined)
   await page.keyboard.press('Space')
   await page.waitForFunction(() => (window.__inkfall?.frame() ?? 0) > 10)

@@ -43,6 +43,14 @@ export type EntityDef =
   | (Placed & { type: 'pearl'; id: 0 | 1 | 2 })
   | (Placed & { type: 'inkBulb' })
   | (Placed & { type: 'inkCore' })
+  /**
+   * A one-time key hint. PRD §11.3: the only text prompts in the whole game.
+   *
+   * Shown small, near Nib, for 180 frames, the first time he walks past it, and
+   * never again. Authored as an entity rather than hard-coded so `[C] INK SHOT`
+   * in World 2 is a line of level data and not a line of code.
+   */
+  | (Placed & { type: 'hint'; text: string })
 
 export type EntityType = EntityDef['type']
 
@@ -55,6 +63,7 @@ export const ENTITY_TYPES: readonly EntityType[] = [
   'pearl',
   'inkBulb',
   'inkCore',
+  'hint',
 ]
 
 export interface LevelDef {
@@ -174,6 +183,10 @@ export function loadLevel(def: LevelDef): LoadedLevel {
       case 'drifter':
         if (e.amplitude !== undefined && e.amplitude < 0) fail(`${where}: amplitude cannot be negative`)
         if (e.period !== undefined && e.period <= 0) fail(`${where}: period must be positive`)
+        break
+      case 'hint':
+        if (e.text.trim() === '') fail(`${where}: hint has no text`)
+        if (e.text.length > 24) fail(`${where}: hint text is ${e.text.length} characters; keep it under 24`)
         break
       case 'clam':
         if (e.phase !== undefined && (!Number.isInteger(e.phase) || e.phase < 0)) {

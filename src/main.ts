@@ -4,8 +4,7 @@ import { DebugOverlay } from './engine/debug.js'
 import { Keyboard } from './engine/input.js'
 import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
-import { greybox } from './content/levels/greybox.js'
-import { levelDef } from './content/levels/index.js'
+import { levelDef, tidepools } from './content/levels/index.js'
 import { bossCameraLock } from './game/world.js'
 import { createSession, updateSession } from './game/state.js'
 import { kill } from './game/player.js'
@@ -24,12 +23,12 @@ const anim = createAnim()
 const keyboard = new Keyboard()
 keyboard.attach(window)
 
-// ?level=greybox reaches the Phase 1 proving ground; the campaign level is the
-// default. A query parameter rather than a menu entry: the grey box is a
-// development tool, not content.
+// The campaign level is the default; ?level=greybox reaches the Phase 1
+// proving ground. A query parameter rather than a menu entry, because the grey
+// box is a development tool and not content.
 const params = new URLSearchParams(window.location.search)
 const requested = params.get('level')
-const level = requested === null ? greybox : levelDef(requested)
+const level = requested === null ? tidepools : levelDef(requested)
 
 const session = createSession(level)
 const audio = new Audio()

@@ -13,6 +13,14 @@ import { BOSS } from './constants.js'
 
 const T = DISPLAY.TILE
 
+/** Three seconds, once. PRD §11.3. */
+export const HINT_FRAMES = 180
+
+export interface Hint extends Box {
+  text: string
+  shown: boolean
+}
+
 export type PickupKind = 'inkBulb' | 'inkCore' | 'shell' | 'pearl'
 
 export interface Pickup extends Box {
@@ -30,6 +38,9 @@ export interface World {
   clams: Clam[]
   boss: Boss | null
   rocks: Rock[]
+  hints: Hint[]
+  /** The hint being shown, and how many frames it has left. */
+  hint: { text: string; frames: number } | null
   /**
    * The boss bowl: exactly one screen of the level's right-hand end.
    *
@@ -115,6 +126,12 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
 
   const arena: Box | null = level.def.boss === undefined ? null : arenaBox(map)
 
+  const hints: Hint[] = level.entities
+    .filter((e): e is typeof e & { type: 'hint' } => e.type === 'hint')
+    // A tall, narrow trigger: you should get the prompt walking past at any
+    // height, and never get it twice for jumping over the same tile.
+    .map((e) => ({ text: e.text, x: e.x * T, y: 0, w: T, h: map.height * T, shown: false }))
+
   return {
     map,
     player: createPlayer(spawn.x, spawn.y),
@@ -123,6 +140,8 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     clams,
     boss: null,
     rocks: [],
+    hints,
+    hint: null,
     arena,
     bossActive: false,
     collapsed: new Set(),
@@ -214,6 +233,7 @@ export function update(w: World, input: InputFrame): void {
 
   collectPickups(w)
   checkCheckpoints(w)
+  checkHints(w)
 
   // The exit only counts once the King is finished. A level with a boss ends
   // with the boss, not with a door behind him.
@@ -331,6 +351,26 @@ function collectPickups(w: World): void {
         break
       }
     }
+  }
+}
+
+/**
+ * One-time key hints. PRD §11.3: no tutorial screens, no text boxes, and these
+ * are the only words in the game.
+ *
+ * Once ever, per run of the level — a player who has seen `[X] INK DASH` does
+ * not need telling again, and a prompt that reappears reads as a nag.
+ */
+function checkHints(w: World): void {
+  if (w.hint) {
+    w.hint.frames--
+    if (w.hint.frames <= 0) w.hint = null
+  }
+  if (!w.player.alive) return
+  for (const h of w.hints) {
+    if (h.shown || !boxesOverlap(w.player, h)) continue
+    h.shown = true
+    w.hint = { text: h.text, frames: HINT_FRAMES }
   }
 }
 

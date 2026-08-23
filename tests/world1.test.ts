@@ -4,7 +4,7 @@ import { tidepools } from '../src/content/levels/w01-tidepools.js'
 import { chapterOf } from '../src/content/chapters.js'
 import { tilesetOf } from '../src/content/tilesets/index.js'
 import { Tile, tileAt } from '../src/game/tilemap.js'
-import { createWorld, update } from '../src/game/world.js'
+import { createWorld, HINT_FRAMES, update } from '../src/game/world.js'
 import { RULES } from '../src/game/constants.js'
 import { blank } from './helpers.js'
 
@@ -55,7 +55,7 @@ describe('the roster is World 1 and only World 1', () => {
     expect(kinds.has('drifter')).toBe(true)
     expect(kinds.has('puffer')).toBe(true)
     for (const k of kinds) {
-      expect(['snapper', 'drifter', 'puffer', 'clam', 'shell', 'pearl', 'inkBulb', 'inkCore']).toContain(k)
+      expect(['snapper', 'drifter', 'puffer', 'clam', 'shell', 'pearl', 'inkBulb', 'inkCore', 'hint']).toContain(k)
     }
   })
 
@@ -183,6 +183,33 @@ describe('the collectibles', () => {
     const xs = level.entities.filter((e) => e.type === 'shell').map((e) => e.x)
     expect(xs.length).toBeGreaterThan(15)
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(level.map.width * 0.8)
+  })
+})
+
+describe('the only words in the game', () => {
+  /** PRD §11.3: no tutorial screens, no text boxes. One key hint, once ever. */
+  test('the dash hint sits at the gap it explains', () => {
+    const hints = level.entities.filter((e): e is typeof e & { type: 'hint' } => e.type === 'hint')
+    expect(hints).toHaveLength(1)
+    expect(hints[0]!.text).toBe('[X] INK DASH')
+    expect(hints[0]!.x).toBeGreaterThan(6)
+    expect(hints[0]!.x).toBeLessThan(14)
+  })
+
+  test('it shows once, for three seconds, and never again', () => {
+    const w = createWorld(level)
+    const hint = w.hints[0]!
+    w.player.x = hint.x
+    update(w, blank())
+    expect(w.hint?.text).toBe('[X] INK DASH')
+
+    for (let i = 0; i < HINT_FRAMES + 2; i++) update(w, blank())
+    expect(w.hint).toBeNull()
+
+    // Walk back over it: nothing. A prompt that reappears reads as a nag.
+    w.player.x = hint.x
+    update(w, blank())
+    expect(w.hint).toBeNull()
   })
 })
 

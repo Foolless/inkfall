@@ -64,25 +64,30 @@ export function drawPause(ctx: CanvasRenderingContext2D): void {
  */
 export function drawLevelClear(ctx: CanvasRenderingContext2D, s: Session): void {
   dim(ctx, 0.82)
-  drawTextCentred(ctx, 'LEVEL CLEAR', W / 2, 24, SHARED.INK_CYAN, { scale: 2 })
+  drawTextCentred(ctx, 'LEVEL CLEAR', W / 2, 18, SHARED.INK_CYAN, { scale: 2 })
 
   const shown = tallyRevealed(s)
   const left = 74
   const right = W - 74
+  const top = 44
+  const step = 11
+
   s.tally.slice(0, shown).forEach((line, i) => {
-    const y = 56 + i * 12
+    const y = top + i * step
     drawText(ctx, line.label, left, y, SHARED.UI_TEXT)
     drawTextRight(ctx, formatScore(line.points), right, y, SHARED.SHELL)
   })
 
-  const totalY = 56 + s.tally.length * 12 + 8
+  const totalY = top + s.tally.length * step + 10
   ctx.fillStyle = SHARED.UI_DIM
   ctx.fillRect(left, totalY - 4, right - left, 1)
   drawText(ctx, 'TOTAL', left, totalY, SHARED.UI_TEXT)
   drawTextRight(ctx, formatScore(s.score + tallyShown(s)), right, totalY, SHARED.PEARL)
 
-  drawTextCentred(ctx, `TIME ${formatTime(s.levelFrames)}`, W / 2, totalY + 18, SHARED.UI_DIM)
-  if (pulse(s.tallyClock)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, H - 18, SHARED.UI_TEXT)
+  drawText(ctx, 'TIME', left, totalY + 14, SHARED.UI_DIM)
+  drawTextRight(ctx, formatTime(s.levelFrames), right, totalY + 14, SHARED.UI_DIM)
+
+  if (pulse(s.tallyClock)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, H - 12, SHARED.UI_TEXT)
 }
 
 export function drawGameOver(ctx: CanvasRenderingContext2D, s: Session): void {

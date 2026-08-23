@@ -14,6 +14,7 @@ import {
 } from '../src/game/state.js'
 import { POINTS } from '../src/game/score.js'
 import { kill } from '../src/game/player.js'
+import { glyph, MISSING } from '../src/content/font.js'
 import { levelFrom } from './helpers.js'
 
 const LEVEL = levelFrom(['S........E', '##########'], 'flow')
@@ -262,6 +263,49 @@ describe('formatting', () => {
     expect(formatScore(84_300)).toBe('84,300')
     expect(formatScore(1_234_567)).toBe('1,234,567')
     expect(formatScore(-1_500)).toBe('-1,500')
+  })
+})
+
+describe('the font', () => {
+  /**
+   * A missing glyph draws as a filled box, which is loud on purpose — but only
+   * useful if nothing the game actually shows hits it.
+   */
+  test('every character the game puts on screen has a glyph', () => {
+    const shown = [
+      'INKFALL',
+      'A SQUID GOES DOWN',
+      'PRESS SPACE',
+      'ARROWS MOVE   SPACE JUMP   X INK DASH',
+      'SHIFT RUN   ESC PAUSE   M MUTE',
+      'PAUSED',
+      'ESC TO RESUME',
+      'LEVEL CLEAR',
+      'GAME OVER',
+      'NO CONTINUES LEFT',
+      'PRESS SPACE TO CONTINUE',
+      'TOTAL',
+      'TIME',
+      'SHELLS',
+      'PEARLS',
+      'BOSS',
+      'NO DAMAGE',
+      'NO DEATH',
+      '[X] INK DASH',
+      '[C] INK SHOT',
+      'NIBx3',
+      'S000',
+      '1,234,567',
+      '10:05',
+      'CONTINUES 3',
+    ].join('')
+    for (const ch of new Set(shown)) {
+      expect(glyph(ch), `no glyph for ${JSON.stringify(ch)}`).not.toBe(MISSING)
+    }
+  })
+
+  test('a character with no glyph is loud rather than silent', () => {
+    expect(glyph('\u00e9')).toBe(MISSING)
   })
 })
 

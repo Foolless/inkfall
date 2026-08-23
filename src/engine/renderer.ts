@@ -8,7 +8,8 @@ import { enemyFrame } from './enemy-anim.js'
 import { clamState, isTelegraphing } from '../game/hazards.js'
 import { formatScore, formatTime, type Session } from '../game/state.js'
 import { SHARED } from '../content/palettes.js'
-import { drawText, drawTextRight } from './text.js'
+import { drawText, drawTextCentred, drawTextRight, textWidth } from './text.js'
+import { clamp } from './camera.js'
 import { drawGameOver, drawLevelClear, drawPause, drawTitle } from './screens.js'
 import { chapterOf } from '../content/chapters.js'
 import { tilesetOf, type Tileset } from '../content/tilesets/index.js'
@@ -91,6 +92,8 @@ export class Renderer {
     this.drawEnemies(w, ox, oy)
     this.drawBoss(w, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
+    // Only while playing: a key hint has no business on top of a tally screen.
+    if (s.screen === 'playing') this.drawHint(w, ox, oy)
     this.drawHud(s)
 
     if (s.screen === 'paused') drawPause(ctx)
@@ -383,6 +386,29 @@ export class Renderer {
    * hardens all three. The player reads their own health where they are already
    * looking.
    */
+  /**
+   * The one-time key hint, drawn small and near Nib.
+   *
+   * PRD §11.3: no tutorial screens, no text boxes. It follows him rather than
+   * sitting in a corner, because a prompt you have to look away to read is a
+   * prompt you read while walking into a Snapper.
+   */
+  private drawHint(w: World, ox: number, oy: number): void {
+    if (!w.hint) return
+    const { ctx } = this
+    const p = w.player
+    const x = clamp(Math.floor(p.x - ox + p.w / 2), 40, DISPLAY.WIDTH - 40)
+    const y = clamp(Math.floor(p.y - oy) - 16, 22, DISPLAY.HEIGHT - 20)
+
+    // It fades out rather than vanishing mid-word.
+    const alpha = Math.min(1, w.hint.frames / 20)
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = 'rgba(5,9,15,0.72)'
+    ctx.fillRect(x - textWidth(w.hint.text) / 2 - 3, y - 2, textWidth(w.hint.text) + 6, 11)
+    drawTextCentred(ctx, w.hint.text, x, y, SHARED.UI_TEXT)
+    ctx.globalAlpha = 1
+  }
+
   private drawHud(s: Session): void {
     const { ctx } = this
     const w = s.world

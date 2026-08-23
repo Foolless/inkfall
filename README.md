@@ -2,7 +2,8 @@
 
 A NES-difficulty 2D platformer about a squid descending from a sunlit tide pool to the abyss.
 
-**Status:** Phase 1 complete — a playable grey box, awaiting the Gate 1 playtest.
+**Status:** Phase 2 built — World 1 is playable end to end, boss included. Awaiting the
+Gate 1 and Gate 2 playtests, both of which need people.
 
 📄 **[docs/PRD.md](docs/PRD.md)** — what the game is
 🛠️ **[docs/PLAN.md](docs/PLAN.md)** — how it gets built: four phases, checkpoints, testing, hosting
@@ -44,15 +45,17 @@ how v1 is built.
 
 ```bash
 npm install
-npm run dev       # the grey box, at http://localhost:5173
-npm run verify    # typecheck + lint + 164 unit tests + build + bundle size
-npm run smoke     # 4 Playwright browser tests
+npm run dev       # World 1, at http://localhost:5173
+npm run verify    # typecheck + lint + 496 unit tests + build + bundle size
+npm run smoke     # 8 Playwright browser tests
 ```
 
-`npm run dev` also serves the sprite editor at `/tools/sprite-editor/`.
+`npm run dev` also serves the sprite editor at `/tools/sprite-editor/`, and
+`?level=greybox` reaches the Phase 1 proving ground.
 
-In the grey box: **arrows/WASD** move, **Space** jumps, **Shift** runs, **X** is the ink
-dash, **R** restarts, **F1** opens the debug overlay (hitboxes, velocity, frame-time graph).
+**Arrows/WASD** move, **Space** jumps, **Shift** runs, **X** is the ink dash, **Esc**
+pauses, **M** mutes, **R** restarts, **F1** opens the debug overlay (hitboxes, velocity,
+frame-time graph).
 
 ## Building it
 
@@ -62,10 +65,26 @@ at a public URL and a gate that a machine can't pass for you:
 1. **Engine & Feel** ✅ — a deployable grey box where Nib moves perfectly and nothing else
    exists. Its gate is a genuine go/no-go: if the ink dash isn't fun with no content around
    it, the project stops there rather than at Phase 4.
-2. **One Real Level** — World 1 complete, proving the whole pipeline once instead of five
-   times.
+2. **One Real Level** ✅ — World 1 complete, proving the whole pipeline once instead of five
+   times. Art, three enemies, three hazards, the Hermit King, a HUD, saves, a runtime
+   chiptune synth, and a solver that proves the level finishable on two pips.
 3. **All Five Levels** — the full descent, completable start to finish.
 4. **Meta & Ship** — pearls, scoring, speedrun timers, audio, polish, accessibility.
+
+## What Phase 2 found
+
+Four things worth knowing before touching this code, all written up in
+[PLAN.md](docs/PLAN.md):
+
+- **The variable-jump cut was silently clamping stomp bounces** to a third of their
+  specified height, which made bounce chains physically impossible and looked like a
+  level-design problem.
+- **A one-tile gap does not exclude Full Nib.** With 16px tiles and a 12×14 hitbox, both
+  drawn tiers fit through one — so the "small-only passage" idea in PRD §4.4 and §7.1 has no
+  geometry behind it yet. §16 lays out the options.
+- **The reachability solver is the level designer's editor**, not just a CI check. It caught
+  a pearl that was supposed to need a World 5 upgrade and did not.
+- **2.7's judgement call is open.** The synth is built and tested; nobody has listened to it.
 
 ## Contributing
 
