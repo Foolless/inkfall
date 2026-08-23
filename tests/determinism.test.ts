@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest'
 import { Act, replayStream } from '../src/engine/input.js'
 import { hashWorld } from '../src/game/hash.js'
 import { createWorld, update, type World } from '../src/game/world.js'
-import { greybox } from '../src/content/greybox.js'
+import { greybox } from '../src/content/levels/greybox.js'
 import { flatGround, levelFrom } from './helpers.js'
 
 /**

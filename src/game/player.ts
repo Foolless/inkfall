@@ -33,6 +33,22 @@ export interface Player extends Box {
   iframes: number
   inWater: boolean
   alive: boolean
+  /**
+   * Where the top of the hitbox was when this frame began.
+   *
+   * Carried so a stomp can ask "were his feet above its head *before* the
+   * sweep?" — without it a fast dash into a crab's flank reads as a landing.
+   */
+  prevY: number
+  /**
+   * True while Nib is in a rise he started himself.
+   *
+   * The variable-height jump cut must only apply to a *jump*. Without this
+   * flag it also clamped stomp bounces, which quietly turned every bounce from
+   * the specified -4.60 into -1.80 — a third of the height the PRD promises,
+   * and the reason a bounce chain could not reach the next enemy.
+   */
+  jumping: boolean
   /** Frames left on the ink cloud that stuns nearby enemies after a hit. */
   stunCloud: number
   /** Last vertical direction pressed, and how long it stays live for aiming. */
@@ -66,6 +82,8 @@ export function createPlayer(x: number, y: number): Player {
     iframes: 0,
     inWater: false,
     alive: true,
+    jumping: false,
+    prevY: y,
     stunCloud: 0,
     aimY: 0,
     aimYFrames: 0,
@@ -144,11 +162,17 @@ export interface PlayerStepContext {
   collapsed: Set<number>
   /** Tile index -> frames of standing left before it collapses. */
   crumbling: Map<number, number>
+  /** Solid boxes that are not terrain — closed crush clams, for now. */
+  solids?: readonly Box[]
+  /** Named sounds this step wants. Filled, never played, by the simulation. */
+  cues?: string[]
 }
 
 export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFrame): void {
   if (!p.alive) return
+  p.prevY = p.y
   const { map, collapsed } = ctx
+  const solids = ctx.solids
   const tier = tierOf(p)
 
   if (p.dashCooldown > 0) p.dashCooldown--
@@ -175,7 +199,11 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   }
 
   refillInk(p)
+  const wasDashing = p.dashFrames > 0
   tryStartDash(p, input)
+  if (!wasDashing && p.dashFrames > 0) {
+    ctx.cues?.push(p.tier === CHARGED_TIER ? 'chargedDash' : 'dash')
+  }
   // Decremented after the dash check, so DASH_DIR_BUFFER frames of grace means
   // exactly that many rather than one fewer.
   if (heldY === 0 && p.aimYFrames > 0) p.aimYFrames--
@@ -187,17 +215,17 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
     p.dashFrames--
     dashEnding = p.dashFrames === 0
   } else if (p.inWater) {
-    swim(p, dir)
+    swim(p, dir, ctx.cues)
   } else {
     walk(p, input, dir, tier)
-    fall(p, input, tier)
+    fall(p, input, tier, ctx.cues)
   }
 
   applyCurrents(map, p)
 
   // X then Y, each in sub-steps — see collision.ts.
-  moveX(map, p, p.vx, collapsed)
-  const vres = moveY(map, p, p.vy, collapsed)
+  moveX(map, p, p.vx, collapsed, solids)
+  const vres = moveY(map, p, p.vy, collapsed, solids)
   if (vres.blocked) {
     if (p.vy > 0 && vres.landedTile >= 0) startCrumble(ctx, vres.landedTile, tier.crumbleHold)
     p.vy = 0
@@ -210,7 +238,8 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
     p.vy *= INK.DASH_CARRYOVER
   }
 
-  const grounded = isGrounded(map, p, collapsed)
+  const grounded = isGrounded(map, p, collapsed, solids)
+  if (grounded) p.jumping = false
   if (grounded && !p.grounded) p.dashCooldown = 0
   if (grounded) p.coyote = PHYSICS.COYOTE_FRAMES
   p.grounded = grounded
@@ -279,23 +308,32 @@ function walk(p: Player, input: InputFrame, dir: number, tier: (typeof TIERS)[nu
   p.vx = approach(p.vx, dir * max, accel)
 }
 
-function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number]): void {
+function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?: string[]): void {
   if (p.jumpBuffer > 0 && (p.grounded || p.coyote > 0)) {
     p.vy = tier.jump
     p.grounded = false
+    p.jumping = true
     p.jumpBuffer = 0
     p.coyote = 0
+    cues?.push('jump')
   }
-  // Variable jump height: releasing early cuts the rise.
-  if (!isHeld(input, Act.Jump) && p.vy < PHYSICS.JUMP_CUT) p.vy = PHYSICS.JUMP_CUT
+  // Variable jump height: releasing early cuts the rise — but only a rise Nib
+  // started himself. A stomp bounce is not a jump and is not the player's to
+  // shorten.
+  if (p.jumping && !isHeld(input, Act.Jump) && p.vy < PHYSICS.JUMP_CUT) {
+    p.vy = PHYSICS.JUMP_CUT
+    p.jumping = false
+  }
+  if (p.vy >= 0) p.jumping = false
 
   p.vy = Math.min(p.vy + tier.gravity, PHYSICS.TERMINAL_FALL)
 }
 
-function swim(p: Player, dir: number): void {
+function swim(p: Player, dir: number, cues?: string[]): void {
   if (p.jumpBuffer > 0) {
     p.vy = WATER.SWIM_STROKE
     p.jumpBuffer = 0
+    cues?.push('swim')
   }
   if (dir === 0) p.vx = approach(p.vx, 0, PHYSICS.AIR_DRAG)
   else if (Math.abs(p.vx) > WATER.SWIM_MAX_X && Math.sign(p.vx) === dir) {

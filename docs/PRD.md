@@ -4,7 +4,7 @@
 **Genre:** 2D side-scrolling action platformer
 **Player character:** Nib, a squid
 **Scope:** 5 levels, one boss each
-**Status:** Draft v1.4 — Phase 1 built; first playtest fed back into the dash's discoverability
+**Status:** Draft v1.4 — Phase 2 built. Gate 1 round one fed back into the dash's discoverability; World 1 is authored, and §16 opens the one-tile-gap problem
 **Scope:** v1 ships **5 levels**. The architecture must not foreclose ~50 (§12.7).
 **Owner:** richard.andrew.young@gmail.com
 **Last updated:** 2026-08-23
@@ -382,7 +382,7 @@ Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go l
 
 | Beat | Content |
 |---|---|
-| A1 | Empty sunlit shelf. One 6-tile gap that is **impossible to jump** — the game's first lesson is that jumping alone is not enough. Dash prompt appears once. |
+| A1 | Empty sunlit shelf. One **5-tile** gap that is **impossible to jump** — the game's first lesson is that jumping alone is not enough. Dash prompt appears once. <small>*(was 6; a 6-tile gap is dx 7, exactly the distance guarantee 2 promises, and only for a dash taken within ±6 frames of the apex. Asking for apex timing on the first required action in the game is how a player concludes the dash is broken. Five tiles is still flatly unjumpable — a run jump clears four — so the lesson survives and the execution does not. The 7-tile jump is kept for C3's last gap.)*</small> |
 | A2 | Three ascending ledges requiring up-dash. Shells laid on the correct arc as a breadcrumb trail. |
 | A3 | First Snapper, alone, on flat ground. First stomp. Ink pip refunds visibly. |
 | A4 | **Ink Bulb taught before it is needed.** A Snapper on a ledge is positioned so most players take their first hit here and shrink; a bulb sits in plain sight 4 tiles on. Players who don't get hit collect it as points and learn what it looks like anyway. |
@@ -903,6 +903,13 @@ export const tidepools: LevelDef = {
 
 Coordinates in the `entities` array are **tile coordinates**, not pixels. A parser in `format.ts` validates on load and throws loudly in dev on an unknown legend character or an out-of-bounds entity.
 
+**One concept, one home.** The grid carries *geometry* — terrain plus the three markers that are positions in the world: `S` start, `E` exit, `K` checkpoint. The `entities` array carries everything that *acts or is collected*: enemies, hazards with state, shells, pearls, Ink Bulbs, Ink Cores. Nothing may be authored in both. The sketch above showed checkpoints as a separate array as well as a legend character; that was two authorities for one fact, and a level with three conches in the grid and two in the list is a bug nobody would find. There is no `checkpoints:` field.
+
+Validation runs at two levels, because a physics fixture is a grid but not a level:
+
+- `loadLevel` — structural. Rejects ragged rows, unknown glyphs, two starts, entities outside the grid or buried in solid tiles, backwards patrol ranges, duplicate pearl slots, a non-positive Drifter period.
+- `loadCampaignLevel` — the rules a *shipped* level must also satisfy: it can be finished (an exit or a boss), it has exactly two conches plus one at the boss door, exactly three pearls, and an Ink Bulb count inside §4.5's range.
+
 ### 12.6 Performance budget
 
 | Budget | Limit |
@@ -1015,6 +1022,18 @@ M1–M8 is the ship. M9 follows.
 | 5 | The name | **INKFALL**, confirmed. No longer a working title. |
 | 6 | Repository | **Done.** Lives at [github.com/Foolless/inkfall](https://github.com/Foolless/inkfall), with the design history preserved. |
 
+### Opened in v1.4 (Phase 2)
+
+**A one-tile gap does not exclude Full Nib.** §4.4 and §7.1 rest on Spent Nib fitting through passages Full Nib cannot, and with this document's own numbers that is not true: tiles are 16 px, Full's hitbox is 12×14 and Spent's is 10×10, so *both* fit through a one-tile opening in either axis. The difference between the tiers is real everywhere else — two pips instead of three, a slightly higher jump, 50% longer on collapsing sand — but the geometric one does not exist. World 1 therefore ships with **no small-only passage**, and W5's pearl ② (the only pearl in the game gated on being small) has nothing to stand on yet.
+
+Three ways out, in increasing order of cost:
+
+1. **Make Full taller than a tile.** A 12×18 hitbox in a 16×24 sprite cell makes one-tile crawl-spaces genuinely Spent-only. It changes every jump arc and every sprite Nib has, so it is a Phase 1 decision being reopened, and the feel-guarantee tests would all need re-running.
+2. **Drop the claim.** Delete small-only passages from §7.1, move W5 ② behind something else, and let the tier difference live entirely in the pip budget. Cheapest, and costs the game one idea.
+3. **Give Spent a verb instead of a size.** A one-tile passage becomes a *squeeze* only Spent can perform — a held-down crouch that Full cannot complete. New mechanic, new art, new tests.
+
+Recommendation: **(2) until Phase 3**, then revisit with W5 in front of us. `src/game/reach.ts` derives clearance from the hitbox rather than assuming it, so whichever way this goes, the solver starts telling the truth the day the numbers change.
+
 ### Still open
 
 1. **Ink Core density is the difficulty dial and is unvalidated.** Specced at 1–2 per level from W3, hidden-only in W1–2. This is the single number most likely to move after M3 playtest, and §15 lists it as the first thing to tighten.
@@ -1120,6 +1139,8 @@ export const DISPLAY = {
 | What Charged grants | A **damaging dash** | More pips; more speed; armor | Pips belong to Deep Jet — keeping them orthogonal means Charged and Deep Jet teach different things. Making the dash *more* beats adding a button. |
 | Vertical dash aim is buffered | 6 frames | Sampling only the exact press frame | Playtest read a mistimed horizontal dash as the up-dash not existing at all |
 | Vertical gates are authored against the *diagonal* reach | ~6.3 tiles | The 7.9 a pure vertical dash reaches | A player moving rightward holds Right; punishing that teaches the wrong lesson |
+| Level authoring split | Grid owns geometry, `entities` owns actors, `hints` owns captions | Checkpoints and pickups in both; everything in one list | Found in Phase 2: §12.5 sketched checkpoints as a legend character *and* an array. Two authorities for one fact is how a level ends up with three conches in the grid and two in the list. Terrain markers are positions, so they stay in the grid; anything that moves, ticks or is collected goes in the typed list; a key prompt is a caption on the room and has no box to collide with. |
+| A1's first gap | 5 tiles | 6 tiles, per the original beat sheet | Found in Phase 2: 6 tiles is dx 7, which is exactly feel guarantee 2 and only holds for an apex-timed dash. The first required action in the game must not need frame-perfect input. |
 | Currents are fluid | A current tile floats you | A separate "dry current" tile type | Found in Phase 1: a current drawn over water replaces the water glyph, so Nib sank through an updraft he should have ridden. The game is underwater; the simple rule is the correct one. |
 | v1 scope | 5 levels, architected for ~50 | Building toward 50 now; ignoring 50 entirely | Five is the deliverable. §12.7 is a set of cheap constraints, not scope — retrofitting stable ids and chapter-owned tilesets later is a rewrite. |
 | Worlds | Ocean descent | Fish-out-of-water; Mario mapping; ink surrealism | Descent gives an emotional arc a level list can't |

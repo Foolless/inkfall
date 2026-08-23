@@ -8,13 +8,14 @@ import { expect, test } from '@playwright/test'
  * the class of bug unit tests structurally cannot: a broken module graph, a
  * canvas that never gets a context, a base path that 404s its own bundle.
  */
-test('the grey box loads and runs', async ({ page }) => {
+test('the game loads and runs', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   page.on('pageerror', (e) => errors.push(e.message))
 
   await page.goto('/')
   await expect(page.locator('canvas#game')).toBeVisible()
+  await page.keyboard.press('Space') // past the title, into World 1
 
   // The canvas must be at the internal resolution, integer-scaled by CSS.
   const size = await page.locator('canvas#game').evaluate((el: HTMLCanvasElement) => ({
@@ -31,7 +32,9 @@ test('the grey box loads and runs', async ({ page }) => {
 })
 
 test('the simulation advances and responds to the keyboard', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?level=greybox')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
   await page.waitForFunction(() => (window.__inkfall?.frame() ?? 0) > 10)
 
   const before = await page.evaluate(() => window.__inkfall!.frame())
@@ -48,10 +51,120 @@ test('the simulation advances and responds to the keyboard', async ({ page }) =>
 })
 
 test('respawn restores Full — never Spent, never Charged', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?level=greybox')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
   await page.waitForFunction(() => (window.__inkfall?.frame() ?? 0) > 10)
   await page.evaluate(() => window.__inkfall!.kill())
   expect(await page.evaluate(() => window.__inkfall!.tier())).toBe(1)
+})
+
+/**
+ * The whole shell, driven from the keyboard: title, play, clear, back to the
+ * title. This is the class of bug unit tests structurally cannot catch — a
+ * screen the state machine can reach but that never renders, or a key the
+ * browser swallows before the simulation sees it.
+ */
+test('title to play to level clear and back, without touching the console', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.screen())).toBe('title')
+
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+  expect(await page.evaluate(() => window.__inkfall!.lives())).toBe(3)
+
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'paused')
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+
+  await page.evaluate(() => window.__inkfall!.clear())
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
+
+  await page.waitForTimeout(600)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'title')
+
+  expect(await page.evaluate(() => window.__inkfall!.score())).toBeGreaterThan(0)
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/**
+ * Progress survives a reload. The one bug class that costs a player their
+ * evening, so it gets a browser test rather than a unit test with a fake.
+ */
+test('clearing a level persists to localStorage and survives a reload', async ({ page }) => {
+  await page.goto('/?level=greybox')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+
+  await page.evaluate(() => window.__inkfall!.clear())
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
+  await page.waitForTimeout(600)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'title')
+
+  const stored = await page.evaluate(() => window.localStorage.getItem('inkfall.save.v1'))
+  expect(stored, 'nothing was written to the save key').not.toBeNull()
+  expect(JSON.parse(stored!).progress.cleared).toContain('greybox')
+
+  await page.reload()
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  const after = await page.evaluate(() => window.localStorage.getItem('inkfall.save.v1'))
+  expect(JSON.parse(after!).progress.cleared).toContain('greybox')
+})
+
+/** A save we cannot read must never be the reason someone loses their progress. */
+test('a corrupt save falls back to defaults, keeps a backup, and never clears the key', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.addInitScript(() => {
+    window.localStorage.setItem('inkfall.save.v1', '{"version":1,"progress":')
+  })
+  await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+
+  const state = await page.evaluate(() => ({
+    original: window.localStorage.getItem('inkfall.save.v1'),
+    backup: window.localStorage.getItem('inkfall.save.v1.bak'),
+  }))
+  expect(state.original).toBe('{"version":1,"progress":')
+  expect(state.backup).toBe('{"version":1,"progress":')
+
+  await expect(page.locator('#toast')).toBeVisible()
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/**
+ * Audio, as far as a machine can check it: nothing before the gesture, a real
+ * context and the chapter's theme after it, and mute on one key. Whether the
+ * synth sounds *good* is checkpoint 2.7's judgement call, and needs ears.
+ */
+test('audio stays silent until a gesture, then plays the chapter theme', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/?level=w01-tidepools')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.audio().started)).toBe(false)
+
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.audio().started)
+
+  const state = await page.evaluate(() => window.__inkfall!.audio())
+  expect(state.playing).toBe('world1')
+  expect(state.muted).toBe(false)
+
+  await page.keyboard.press('KeyM')
+  await page.waitForFunction(() => window.__inkfall!.audio().muted)
+
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
 })
 
 test('the sprite editor loads', async ({ page }) => {

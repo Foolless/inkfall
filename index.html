@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>INKFALL — grey box</title>
+    <title>INKFALL</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%F0%9F%A6%91%3C/text%3E%3C/svg%3E" />
     <style>
       html, body { margin: 0; height: 100%; background: #05090f; overflow: hidden; }
@@ -11,16 +11,21 @@
       canvas { display: block; image-rendering: pixelated; background: #0b1116; }
       #help { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: .06em; line-height: 1.9; padding: 0 16px; }
       #help b { color: #00e5cc; font-weight: 500; }
+      /* Non-blocking, and it never covers the playfield: a save problem is
+         something to tell the player about, not something to stop them for. */
+      #toast { position: fixed; top: 8px; left: 0; right: 0; margin: 0; text-align: center; font-size: 11px; color: #ffd9a0; }
+      #toast[hidden] { display: none; }
       kbd { color: #9cb0b8; border: 1px solid #1d2b36; border-bottom-width: 2px; border-radius: 3px; padding: 1px 5px; }
     </style>
   </head>
   <body>
-    <canvas id="game" aria-label="INKFALL grey box"></canvas>
+    <canvas id="game" aria-label="INKFALL"></canvas>
+    <p id="toast" hidden></p>
     <p id="help">
       <kbd>← →</kbd> move &nbsp; <kbd>Space</kbd> jump &nbsp; <kbd>Shift</kbd> run &nbsp;
       <kbd>X</kbd> ink dash &mdash; <b>hold a direction to aim it</b>, including
       <kbd>↑</kbd> to dash upward and <kbd>↑</kbd>+<kbd>→</kbd> for diagonals
-      &nbsp; <kbd>R</kbd> restart &nbsp; <kbd>F1</kbd> debug
+      &nbsp; <kbd>Esc</kbd> pause &nbsp; <kbd>M</kbd> mute &nbsp; <kbd>R</kbd> restart &nbsp; <kbd>F1</kbd> debug
     </p>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,10 +1,17 @@
+import { createAnim, updateAnim } from './engine/anim.js'
 import { createCamera, updateCamera } from './engine/camera.js'
 import { DebugOverlay } from './engine/debug.js'
 import { Keyboard } from './engine/input.js'
 import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
-import { greybox } from './content/greybox.js'
-import { createWorld, respawn, resetWorld, update } from './game/world.js'
+import { levelDef, tidepools } from './content/levels/index.js'
+import { bossCameraLock } from './game/world.js'
+import { createSession, updateSession } from './game/state.js'
+import { kill } from './game/player.js'
+import { loadSave, recordClear, recordHighScore, writeSave, type SaveData } from './engine/save.js'
+import { Audio, type Cue } from './engine/audio/sfx.js'
+import { trackFor } from './content/music/world1.js'
+import { chapterOf } from './content/chapters.js'
 
 const canvas = document.getElementById('game')
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing')
@@ -12,19 +19,82 @@ if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missin
 const renderer = new Renderer(canvas)
 const camera = createCamera()
 const debug = new DebugOverlay()
+const anim = createAnim()
 const keyboard = new Keyboard()
 keyboard.attach(window)
 
-let world = createWorld(greybox)
+// The campaign level is the default; ?level=greybox reaches the Phase 1
+// proving ground. A query parameter rather than a menu entry, because the grey
+// box is a development tool and not content.
+const params = new URLSearchParams(window.location.search)
+const requested = params.get('level')
+const level = requested === null ? tidepools : levelDef(requested)
+
+const session = createSession(level)
+const audio = new Audio()
+
+/**
+ * Audio cannot start until the player has touched something (PRD §10.4), which
+ * is exactly what the title screen's "PRESS SPACE" is for. Everything before
+ * that point queues nothing and simply makes no sound.
+ */
+function startAudio(): void {
+  if (audio.started) return
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctor) return
+  audio.start(new Ctor())
+  const track = trackFor(chapterOf(level.chapter).music)
+  if (track) audio.playMusic(track)
+}
+window.addEventListener('keydown', startAudio, { once: true })
+window.addEventListener('pointerdown', startAudio, { once: true })
+
+// Progress is loaded once at boot. `writable` is false when the file was
+// unreadable or came from a newer build — in both cases the game is playable
+// and the existing file is left exactly as it was found.
+const loaded = loadSave(window.localStorage)
+let save: SaveData = loaded.data
+const canWrite = loaded.writable
+if (loaded.message) showToast(loaded.message)
+
+function showToast(message: string): void {
+  const el = document.getElementById('toast')
+  if (!el) return
+  el.textContent = message
+  el.hidden = false
+  window.setTimeout(() => (el.hidden = true), 8_000)
+}
+
+function persist(): void {
+  if (!canWrite) return
+  save = recordClear(save, level.id, {
+    pearls: session.world.pearls,
+    seconds: session.levelFrames / 60,
+  })
+  save = recordHighScore(save, {
+    score: session.score,
+    character: save.characters.selected,
+    date: new Date().toISOString().slice(0, 10),
+    levelsCleared: save.progress.cleared.length,
+    deaths: session.world.player.deaths,
+  })
+  writeSave(window.localStorage, save)
+}
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'F1') {
     e.preventDefault()
     debug.toggle()
   }
-  if (e.code === 'KeyR') {
+  if (e.code === 'KeyM') {
     e.preventDefault()
-    world = resetWorld(greybox)
+    audio.toggleMute()
+  }
+  if (e.code === 'KeyR' && session.screen === 'playing') {
+    e.preventDefault()
+    session.world = createSession(level).world
+    session.levelFrames = 0
+    session.deathsCharged = session.world.player.deaths
   }
 })
 
@@ -35,39 +105,75 @@ fit()
 startLoop({
   update: () => {
     const input = keyboard.snapshot()
-    update(world, input)
-    if (world.cleared) world = resetWorld(greybox)
+    const screenBefore = session.screen
+    updateSession(session, input)
+    for (const cue of session.world.cues) audio.play(cue as Cue)
+    if (session.screen !== screenBefore) audio.play('menu')
+    if (session.pendingSave) {
+      session.pendingSave = false
+      persist()
+    }
+    // Animation advances on the simulation step, not the render, so a cycle
+    // never speeds up on a fast display or stutters on a slow one.
+    updateAnim(anim, session.world.player)
   },
   render: (frameTimeMs) => {
     debug.sample(frameTimeMs)
-    updateCamera(camera, world.player, world.map)
-    renderer.draw(world, camera)
-    debug.draw(renderer.ctx, world, camera)
+    // Scheduled against the audio clock, not the frame: a dropped frame nobody
+    // sees is a stutter everybody hears.
+    audio.update()
+    updateCamera(camera, session.world.player, session.world.map, bossCameraLock(session.world))
+    renderer.draw(session, camera, anim)
+    debug.draw(renderer.ctx, session.world, camera)
   },
 })
 
-// Exposed so the browser smoke test can drive the simulation directly rather
-// than racing the render loop.
+// Exposed so the browser smoke test can drive the game directly rather than
+// racing the render loop.
 declare global {
   interface Window {
     __inkfall?: {
       frame: () => number
+      screen: () => string
       tier: () => number
       ink: () => number
+      lives: () => number
+      score: () => number
+      pearls: () => number
       reset: () => void
       kill: () => void
+      clear: () => void
+      warp: (tx: number) => void
+      audio: () => { started: boolean; playing: string | null; muted: boolean }
     }
   }
 }
 window.__inkfall = {
-  frame: () => world.frame,
-  tier: () => world.player.tier,
-  ink: () => world.player.ink,
+  frame: () => session.world.frame,
+  screen: () => session.screen,
+  tier: () => session.world.player.tier,
+  ink: () => session.world.player.ink,
+  lives: () => session.lives,
+  score: () => session.score + session.world.score,
   reset: () => {
-    world = resetWorld(greybox)
+    session.world = createSession(level).world
+    session.deathsCharged = 0
   },
   kill: () => {
-    world.player.alive = false
-    respawn(world)
+    // Through kill(), not by clearing `alive`: the death tally is what charges
+    // a life, and setting the flag by hand would skip it.
+    kill(session.world.player)
   },
+  clear: () => {
+    session.world.cleared = true
+  },
+  // Teleport, for looking at a room without playing to it. Debug only.
+  warp: (tx: number) => {
+    session.world.player.x = tx * 16
+    session.world.player.y = 18 * 16 - session.world.player.h
+    session.world.player.vx = 0
+    session.world.player.vy = 0
+  },
+  pearls: () => save.progress.pearls[level.id]?.filter(Boolean).length ?? 0,
+  audio: () => ({ started: audio.started, playing: audio.nowPlaying, muted: audio.muted }),
 }

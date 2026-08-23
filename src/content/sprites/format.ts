@@ -93,3 +93,21 @@ export function fromSource(src: string): SpriteDef {
 export function blank(name: string, w: number, h: number, palette: string[]): SpriteDef {
   return { name, w, h, palette, data: '0'.repeat(w * h) }
 }
+
+/**
+ * Author a frame as one string per pixel row.
+ *
+ * This is how every sprite in src/content/sprites is written, because a 16x16
+ * frame laid out as sixteen lines of sixteen digits is legible in a diff — you
+ * can see the squid. A single 256-character string is not.
+ */
+export function sprite(name: string, palette: string[], rows: readonly string[]): SpriteDef {
+  if (rows.length === 0) throw new SpriteFormatError(`${name}: no rows`)
+  const w = rows[0]!.length
+  rows.forEach((row, y) => {
+    if (row.length !== w) throw new SpriteFormatError(`${name}: row ${y} is ${row.length} wide, expected ${w}`)
+  })
+  const def: SpriteDef = { name, w, h: rows.length, palette, data: rows.join('') }
+  validate(def)
+  return def
+}

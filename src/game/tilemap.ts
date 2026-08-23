@@ -30,13 +30,18 @@ export const LEGEND: Record<string, TileId> = {
   '=': Tile.SLICK,
 }
 
-/** Characters that mark an entity and leave the tile itself empty. */
+/**
+ * Markers that occupy a grid cell but leave the tile itself empty.
+ *
+ * Only geometry lives here — where the level starts, where it ends, and where
+ * its conches stand. Everything that acts or is collected is authored in the
+ * `entities` list instead (src/content/levels/format.ts), so no concept has two
+ * places it could have been written.
+ */
 export const ENTITY_CHARS = {
   S: 'start',
   E: 'exit',
   K: 'checkpoint',
-  b: 'inkBulb',
-  o: 'inkCore',
 } as const
 export type EntityKind = (typeof ENTITY_CHARS)[keyof typeof ENTITY_CHARS]
 

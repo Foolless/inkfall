@@ -3,7 +3,7 @@ import { Act } from '../src/engine/input.js'
 import { INK } from '../src/game/constants.js'
 import { parseTiles } from '../src/game/tilemap.js'
 import { createWorld, HINT_FRAMES, update } from '../src/game/world.js'
-import { greybox } from '../src/content/greybox.js'
+import { greybox } from '../src/content/levels/greybox.js'
 import { blank, Driver, flatGround, settle, TILE, worldWith } from './helpers.js'
 
 /**
@@ -117,7 +117,7 @@ describe('the grey box teaches the up-dash', () => {
   })
 
   test('the map is still rectangular after the rebuild', () => {
-    expect(new Set(greybox.tiles.map((r) => r.length)).size).toBe(1)
+    expect(new Set(greybox.tiles.map((r: string) => r.length)).size).toBe(1)
     expect(map.width).toBeGreaterThan(100)
   })
 })
@@ -152,7 +152,9 @@ describe('one-time hints', () => {
   })
 
   test('a distant hint does not fire', () => {
-    const far = { ...level, hints: [{ tx: 40, ty: 0, text: 'TEST', radius: 2 }] }
+    // Inside the grid — the loader rejects an anchor outside it — but well out
+    // of range of where Nib starts.
+    const far = { ...level, hints: [{ tx: 9, ty: 0, text: 'TEST', radius: 2 }] }
     const w = createWorld(far)
     for (let i = 0; i < 60; i++) update(w, blank())
     expect(w.hints[0]!.frames).toBe(0)

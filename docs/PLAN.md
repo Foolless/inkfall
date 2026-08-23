@@ -6,6 +6,7 @@ Companion to [PRD.md](PRD.md), which says *what* the game is. This says how it g
 in what order, and how we know each piece actually works.
 
 **Status:** Phase 1 complete and deployed — Gate 1 run once, one finding fixed, awaiting a re-test
+✅ Phase 2 built — awaiting Gate 2
 **Last updated:** 2026-08-23
 
 ---
@@ -40,7 +41,7 @@ smoke test and human eyes. Chasing coverage through draw calls is wasted effort.
 | Phase | What it produces | Exit gate | Rough effort |
 |---|---|---|---|
 | **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — *round 1 done, one fix applied, re-testing* | 8–12 days |
-| **2 · One Real Level** | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min | 12–18 days |
+| **2 · One Real Level** ✅ | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min — *pending* | 12–18 days |
 | **3 · All Five Levels** | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier | 20–30 days |
 | **4 · Meta & Ship** | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB | 15–22 days |
 
@@ -187,7 +188,7 @@ costs ten days. Failing at Phase 4 costs eighty.
 
 ---
 
-# Phase 2 · One Real Level
+# Phase 2 · One Real Level ✅
 
 > **Goal:** World 1 end to end, in final art, with everything a shipped game needs — for one
 > level. This proves the *whole pipeline*, not just the engine.
@@ -195,6 +196,40 @@ costs ten days. Failing at Phase 4 costs eighty.
 Building one level completely, rather than five levels partially, is what surfaces the
 expensive unknowns: how long a sprite really takes, whether the synth sounds acceptable,
 whether the save system holds. Better to learn all of that once than five times.
+
+**Built.** All ten checkpoints are green: 521 unit tests, 8 browser smoke tests, 29 kB
+gzipped. Gate 2 is the remaining step, and it needs a stranger.
+
+### What Phase 2 surfaced
+
+The tests earned their keep again, and so did looking at the screen.
+
+| Found | Where | Why it mattered |
+|---|---|---|
+| **The jump cut was eating stomp bounces** | `player.ts` | Releasing jump clamped *any* rise, so every bounce was −1.80 instead of the specified −4.60: a third of the promised height, and just low enough that a bounce chain could not physically reach the next enemy. It read as a level-design problem until something measured it. |
+| **Landing between two crabs stomped one and was bitten by the other** | `combat.ts` | The first stomp reverses `vy`, so the second enemy in the same landing read as a walk into its flank. Contacts now resolve against one snapshot of how Nib arrived, and a landing beats a touch for the whole frame. |
+| **A one-tile gap does not exclude Full Nib** | PRD §4.4, §7.1 | 16px tiles against a 12×14 hitbox: *both* tiers fit. The design's small-only passages cannot be built at these numbers. W1 ships without one; PRD §16 lays out the three ways forward. |
+| **A straight-line reachability check can never land on a thin slab** | `reach.ts` | The line to any one-tile platform passes through the platform. Paths are now checked as an L — rise, then travel. |
+| **Pearl 3 was reachable without Deep Jet** | World 1 C1 | Which would have made the backtracking engine decorative. The gap is now over a bed of urchins with no footing, at fifteen tiles. |
+| **The boss arena was anchored to the map, not the floor** | `world.ts` | The King spawned inside the sand and the locked camera pointed at bedrock. The floor probe also scanned downward, which finds a platform, not a floor. |
+
+**One thing merged rather than built.** Gate 1's round-one fix added a hint
+system to `LevelDef` at the same time Phase 2 independently added one as an
+entity type. Two implementations of one idea is exactly what the authoring-split
+rule exists to prevent, so the trunk's won: hints are a `hints: HintDef[]` field
+anchored to a tile with a radius, not entities. A key prompt is a caption on a
+room, and a caption has no box to collide with. World 1 carries two — the dash
+at A1's gap and the up-dash at A2's first ledge — and Gate 1's finding is why
+the second one exists at all.
+
+Two deviations from the PRD, both recorded in its decisions log:
+
+- **A1's first gap is five tiles, not six.** Six is dx 7 — exactly feel guarantee 2, and only
+  for a dash taken within six frames of the apex. Apex timing on the first required action in
+  the game is how a player concludes the dash is broken. Five is still flatly unjumpable.
+- **The grid owns geometry; the entity list owns actors.** §12.5 sketched checkpoints in both
+  places. Two authorities for one fact is how a level ends up with three conches in the grid
+  and two in the list.
 
 ### Checkpoints
 
@@ -210,6 +245,12 @@ whether the save system holds. Better to learn all of that once than five times.
 | **2.8** | **World 1, all sections.** A1 through C3, per the PRD beat sheet. Ink Bulb taught in A4. | **Reachability test**: provably completable at the Spent tier |
 | **2.9** | **The Hermit King.** Three phases, fixed-camera arena, boss door and level exit. | Boss phase-transition tests |
 | **2.10** | **Title screen and level clear.** Enough shell to start, play, finish and restart without touching the console. | Browser smoke test drives the full loop |
+
+Every checkpoint above is ✅ except one judgement call: **2.7 asks whether the synth sounds
+acceptable, and that decision has not been made.** The APU, the tracker and World 1's theme
+are built and everything checkable is checked — pitch, tempo, note length, harmonic
+structure, a real AudioContext starting on a real keypress. Whether it *sounds good* needs
+ears, and it must be answered before Phase 4 commits to eleven tracks.
 
 ### 🚦 Gate 2
 

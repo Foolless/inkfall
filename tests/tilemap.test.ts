@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { LevelParseError, parseTiles, Tile, tileAt } from '../src/game/tilemap.js'
-import { greybox } from '../src/content/greybox.js'
+import { greybox } from '../src/content/levels/greybox.js'
 import { createWorld } from '../src/game/world.js'
 
 /**
@@ -27,11 +27,16 @@ describe('level parsing', () => {
     expected.forEach((t, i) => expect(tileAt(map, i, 0), `column ${i}`).toBe(t))
   })
 
-  test('entity marks are extracted and leave the tile empty', () => {
-    const map = parseTiles(['S.E.K.b.o.'])
-    expect(map.entities.map((e) => e.kind)).toEqual(['start', 'exit', 'checkpoint', 'inkBulb', 'inkCore'])
+  test('the grid carries only geometry markers, and they leave the tile empty', () => {
+    const map = parseTiles(['S.E.K.'])
+    expect(map.entities.map((e) => e.kind)).toEqual(['start', 'exit', 'checkpoint'])
     expect(map.entities[1]).toMatchObject({ kind: 'exit', tx: 2, ty: 0 })
-    for (let x = 0; x < 10; x++) expect(tileAt(map, x, 0)).toBe(Tile.EMPTY)
+    for (let x = 0; x < 6; x++) expect(tileAt(map, x, 0)).toBe(Tile.EMPTY)
+  })
+
+  test('a pickup glyph is no longer a legend character — pickups are entities', () => {
+    expect(() => parseTiles(['S.b.'])).toThrow(LevelParseError)
+    expect(() => parseTiles(['S.o.'])).toThrow(LevelParseError)
   })
 
   test('rejects an unknown legend character, naming the position', () => {
@@ -73,7 +78,7 @@ describe('the grey box', () => {
   })
 
   test('is rectangular', () => {
-    const widths = new Set(greybox.tiles.map((r) => r.length))
+    const widths = new Set(greybox.tiles.map((r: string) => r.length))
     expect(widths.size).toBe(1)
   })
 

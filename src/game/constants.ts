@@ -19,6 +19,8 @@ export const DISPLAY = {
   CAMERA_EASE_FRAMES: 20,
   CAMERA_DEADZONE_Y: 48,
   HITSTOP_FRAMES: 3,
+  /** Shrinking freezes a beat longer than a stomp — PRD §9.5. */
+  HITSTOP_SHRINK: 4,
 } as const
 
 export const PHYSICS = {
@@ -108,6 +110,81 @@ export const RULES = {
   RESPAWN_TIER: FULL, // never Spent, never Charged
   DEATH_ANIM_FRAMES: 90,
   CRUMBLE_RESPAWN: 180,
+} as const
+
+/**
+ * The World 1 roster. PRD §6.1.
+ *
+ * Speeds are pixels per frame; distances in this block are **tiles**, because
+ * that is the unit a level designer thinks in when placing a Puffer.
+ */
+export const ENEMIES = {
+  /** Crab. Walks a platform and turns at ledges and walls. */
+  SNAPPER_SPEED: 0.6,
+  /** Jellyfish. Sine float, ignores terrain, damaging on every side. */
+  DRIFTER_AMPLITUDE: 3,
+  DRIFTER_PERIOD: 120,
+  /** Inflates within this many tiles of Nib, and stays inflated this long. */
+  PUFFER_TRIGGER: 3,
+  PUFFER_INFLATE: 90,
+  /** Enemies fall at Nib's rate — one gravity for the whole world. */
+  GRAVITY: 0.42,
+  TERMINAL_FALL: 6.0,
+  /**
+   * How far into an enemy's head still counts as a stomp.
+   *
+   * The forgiveness that makes stomping feel fair: land anywhere in the top few
+   * pixels and it reads as a stomp, not as walking into the side of a crab.
+   */
+  STOMP_BAND: 6,
+} as const
+
+/**
+ * Hazards with a clock. PRD §6.2.
+ *
+ * The crush clam's numbers are the honest-difficulty pillar in miniature: the
+ * slam is fast because a slow one is not frightening, and the telegraph is long
+ * because a death the player could not have seen coming is the one thing the
+ * game promises never to do.
+ */
+export const HAZARDS = {
+  CLAM_OPEN: 90,
+  CLAM_SLAM: 6,
+  CLAM_CLOSED: 60,
+  CLAM_TELEGRAPH: 20,
+} as const
+
+/**
+ * Bosses. PRD §6.3: three hits, three phases, one arena, no health bar.
+ *
+ * Per-phase values are indexed by phase - 1. Nothing here is random: a boss
+ * that rolls dice cannot be practised, and a boss that cannot be practised is
+ * not a NES boss.
+ */
+export const BOSS = {
+  HERMIT_HITS: 3,
+  /** He rears up before the first charge, so the fight has a beginning. */
+  WAKE_FRAMES: 90,
+  CHARGE_SPEED: [1.6, 1.6, 2.4],
+  IDLE_FRAMES: [70, 55, 40],
+  /** The damage window. Long, because the whole fight is this one moment. */
+  BONK_STUN: 90,
+  /** The wind-up before a rock leaves his claw. The arc is the rest of it. */
+  THROW_TELEGRAPH: 40,
+  ROCK_FLIGHT_FRAMES: 80,
+  ROCK_GRAVITY: 0.16,
+  GRAVITY: 0.42,
+  TERMINAL_FALL: 6.0,
+  DEATH_FRAMES: 120,
+  /** Exactly one screen wide, so a fixed camera can hold the whole fight. */
+  ARENA_TILES: 20,
+  /**
+   * How much sand the locked camera shows below the arena floor.
+   *
+   * Without it the floor sits exactly on the bottom edge of the screen and the
+   * King fights on a horizon rather than on a beach.
+   */
+  ARENA_CAMERA_DROP: 28,
 } as const
 
 /** Collision resolves in sub-steps no larger than this, so nothing tunnels. */
