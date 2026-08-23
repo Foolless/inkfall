@@ -4,7 +4,7 @@
 **Genre:** 2D side-scrolling action platformer
 **Player character:** Nib, a squid
 **Scope:** 5 levels, one boss each
-**Status:** Draft v1.4 — Phase 2 in build; World 1 authored, and §16 opens the one-tile-gap problem
+**Status:** Draft v1.4 — Phase 2 built. Gate 1 round one fed back into the dash's discoverability; World 1 is authored, and §16 opens the one-tile-gap problem
 **Scope:** v1 ships **5 levels**. The architecture must not foreclose ~50 (§12.7).
 **Owner:** richard.andrew.young@gmail.com
 **Last updated:** 2026-08-23
@@ -293,6 +293,10 @@ Keyboard only. Both arrow keys and WASD are always live; there is no "choose a s
 | Skip cutscene / confirm | Space | Enter |
 
 **Dash aiming:** the dash fires in the direction of currently-held movement keys at the moment X is pressed, resolved to 8 directions. **No held direction = dash in Nib's facing direction, horizontally.** Diagonals require two keys held.
+
+**Vertical aim is buffered by 6 frames.** A vertical direction released shortly before X still aims the dash. Up and X essentially never land on the same frame from a real keyboard, and without this a one-frame gap silently produces a horizontal dash — which a player experiences not as a mistake but as *"there is no up-dash"*. Horizontal aim is not buffered: it already falls back to facing, which is almost always what was wanted.
+
+**A diagonal dash delivers only ~71% of its speed on each axis.** This matters for level design far more than it looks: a player travelling right holds Right, so their "up-dash" is really an up-right dash and reaches roughly 6.3 tiles, not the 7.9 of a pure vertical one. **Author vertical gates against the diagonal figure**, because holding the direction you are moving in is not a mistake to punish.
 
 **Remapping:** full key remapping is available in Options and persists to `localStorage`. Required for accessibility (§13).
 
@@ -765,7 +769,9 @@ Minimal, top strip, 16 px tall, never overlapping playfield geometry:
 
 ### 11.3 Onboarding
 
-No tutorial screens, no text boxes. Everything is taught by level geometry (§7.1). The **only** text prompts in the entire game are one-time key hints on first encounter — `[X] INK DASH`, `[C] INK SHOT` — rendered small, near Nib, for 180 frames, once ever.
+No tutorial screens, no text boxes. Everything is taught by level geometry (§7.1). The **only** text prompts in the entire game are one-time key hints on first encounter — `[X] INK DASH`, `[↑ + X] DASH UP`, `[C] INK SHOT` — rendered small, near Nib, for 180 frames, once ever, then never again.
+
+**The up-dash needs its own prompt, and its own gate.** The first playtest returned "needs a double jump or dash upwards" from a build that already had one: eight directions are invisible in a level that only ever asks for two. A mechanic the player cannot discover does not exist, so every world that introduces a directional use of the dash must (a) gate progress on it early, (b) make the gate unmissable and non-lethal, and (c) spend one prompt on it. Geometry teaches; the prompt only names the key.
 
 ---
 
@@ -1131,7 +1137,9 @@ export const DISPLAY = {
 | Damage model | Three tiers, Mario-style *(v1.2; was one-hit death in v1.0, two tiers in v1.1)* | One-hit death; a health bar | The tier and the ink budget are the **same resource**, so a hit tightens the next jump instead of ticking a counter. Difficulty moves into sparse checkpoints, where it belongs. |
 | Ink capacity when small | 2 pips | 3 pips regardless of size | If being small cost nothing but a hitbox, the tier would be free. Losing a pip is the cost that makes an Ink Bulb worth crossing a room for. |
 | What Charged grants | A **damaging dash** | More pips; more speed; armor | Pips belong to Deep Jet — keeping them orthogonal means Charged and Deep Jet teach different things. Making the dash *more* beats adding a button. |
-| Level authoring split | Grid owns geometry, `entities` owns actors | Checkpoints and pickups in both; everything in one list | Found in Phase 2: §12.5 sketched checkpoints as a legend character *and* an array. Two authorities for one fact is how a level ends up with three conches in the grid and two in the list. Terrain markers are positions, so they stay in the grid; anything that moves, ticks or is collected goes in the typed list. |
+| Vertical dash aim is buffered | 6 frames | Sampling only the exact press frame | Playtest read a mistimed horizontal dash as the up-dash not existing at all |
+| Vertical gates are authored against the *diagonal* reach | ~6.3 tiles | The 7.9 a pure vertical dash reaches | A player moving rightward holds Right; punishing that teaches the wrong lesson |
+| Level authoring split | Grid owns geometry, `entities` owns actors, `hints` owns captions | Checkpoints and pickups in both; everything in one list | Found in Phase 2: §12.5 sketched checkpoints as a legend character *and* an array. Two authorities for one fact is how a level ends up with three conches in the grid and two in the list. Terrain markers are positions, so they stay in the grid; anything that moves, ticks or is collected goes in the typed list; a key prompt is a caption on the room and has no box to collide with. |
 | A1's first gap | 5 tiles | 6 tiles, per the original beat sheet | Found in Phase 2: 6 tiles is dx 7, which is exactly feel guarantee 2 and only holds for an apex-timed dash. The first required action in the game must not need frame-perfect input. |
 | Currents are fluid | A current tile floats you | A separate "dry current" tile type | Found in Phase 1: a current drawn over water replaces the water glyph, so Nib sank through an updraft he should have ridden. The game is underwater; the simple rule is the correct one. |
 | v1 scope | 5 levels, architected for ~50 | Building toward 50 now; ignoring 50 entirely | Five is the deliverable. §12.7 is a set of cheap constraints, not scope — retrofitting stable ids and chapter-owned tilesets later is a rewrite. |

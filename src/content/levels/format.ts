@@ -43,14 +43,6 @@ export type EntityDef =
   | (Placed & { type: 'pearl'; id: 0 | 1 | 2 })
   | (Placed & { type: 'inkBulb' })
   | (Placed & { type: 'inkCore' })
-  /**
-   * A one-time key hint. PRD §11.3: the only text prompts in the whole game.
-   *
-   * Shown small, near Nib, for 180 frames, the first time he walks past it, and
-   * never again. Authored as an entity rather than hard-coded so `[C] INK SHOT`
-   * in World 2 is a line of level data and not a line of code.
-   */
-  | (Placed & { type: 'hint'; text: string })
 
 export type EntityType = EntityDef['type']
 
@@ -63,7 +55,6 @@ export const ENTITY_TYPES: readonly EntityType[] = [
   'pearl',
   'inkBulb',
   'inkCore',
-  'hint',
 ]
 
 export interface LevelDef {
@@ -79,6 +70,14 @@ export interface LevelDef {
   order: number
   tiles: readonly string[]
   entities?: readonly EntityDef[]
+  /**
+   * One-time key prompts. PRD §11.3 allows exactly this and nothing more.
+   *
+   * Level data rather than code, so `[C] INK SHOT` in World 2 is a line in a
+   * level file. Kept out of the `entities` list because a hint is not a thing
+   * in the world — it is a caption on one, and it has no box to collide with.
+   */
+  hints?: readonly HintDef[]
   /** Boss id, if the level ends in one. A level needs an exit or a boss. */
   boss?: string
   /**
@@ -89,6 +88,20 @@ export interface LevelDef {
    * developer happens to be at it.
    */
   par?: number
+}
+
+/**
+ * A one-time key prompt, shown on first approach and never again.
+ *
+ * Gate 1 found that the dash reads as horizontal-only, so the prompt worth
+ * spending is the up-dash. Everything else is taught by geometry.
+ */
+export interface HintDef {
+  tx: number
+  ty: number
+  text: string
+  /** Tiles from the anchor at which the prompt triggers. */
+  radius?: number
 }
 
 export class LevelValidationError extends Error {
@@ -147,6 +160,15 @@ export function loadLevel(def: LevelDef): LoadedLevel {
     fail(`${checkpoints.length} checkpoints (K); the budget is ${maxCheckpoints}`)
   }
 
+  for (const [i, hint] of (def.hints ?? []).entries()) {
+    if (hint.text.trim() === '') fail(`hint ${i} has no text`)
+    if (hint.text.length > 26) fail(`hint ${i} is ${hint.text.length} characters; keep it under 26`)
+    if (hint.tx < 0 || hint.tx >= map.width || hint.ty < 0 || hint.ty >= map.height) {
+      fail(`hint ${i} at ${hint.tx},${hint.ty} is outside the grid`)
+    }
+    if (hint.radius !== undefined && !(hint.radius > 0)) fail(`hint ${i} has a non-positive radius`)
+  }
+
   const entities = def.entities ?? []
   const pearlIds = new Set<number>()
   const occupied = new Set<string>()
@@ -183,10 +205,6 @@ export function loadLevel(def: LevelDef): LoadedLevel {
       case 'drifter':
         if (e.amplitude !== undefined && e.amplitude < 0) fail(`${where}: amplitude cannot be negative`)
         if (e.period !== undefined && e.period <= 0) fail(`${where}: period must be positive`)
-        break
-      case 'hint':
-        if (e.text.trim() === '') fail(`${where}: hint has no text`)
-        if (e.text.length > 24) fail(`${where}: hint text is ${e.text.length} characters; keep it under 24`)
         break
       case 'clam':
         if (e.phase !== undefined && (!Number.isInteger(e.phase) || e.phase < 0)) {

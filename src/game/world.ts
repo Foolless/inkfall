@@ -2,7 +2,7 @@ import { Act, isHeld, type InputFrame } from '../engine/input.js'
 import { CHARGED_TIER, DISPLAY, FULL, RULES, type TierIndex } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
 import { Tile, tileAt, type TileMap } from './tilemap.js'
-import { loadLevel, type LevelDef, type LoadedLevel } from '../content/levels/format.js'
+import { loadLevel, type HintDef, type LevelDef, type LoadedLevel } from '../content/levels/format.js'
 import { createPlayer, promote, setTier, updatePlayer, type Player, type PlayerStepContext } from './player.js'
 import { isEnemyKind, spawnEnemy, updateEnemy, type Enemy, type EnemyKind } from './enemies/index.js'
 import { resolveCombat } from './combat.js'
@@ -12,14 +12,6 @@ import { spawnBoss, updateBoss, updateRocks, type Boss, type Rock } from './boss
 import { BOSS } from './constants.js'
 
 const T = DISPLAY.TILE
-
-/** Three seconds, once. PRD §11.3. */
-export const HINT_FRAMES = 180
-
-export interface Hint extends Box {
-  text: string
-  shown: boolean
-}
 
 export type PickupKind = 'inkBulb' | 'inkCore' | 'shell' | 'pearl'
 
@@ -39,8 +31,6 @@ export interface World {
   boss: Boss | null
   rocks: Rock[]
   hints: Hint[]
-  /** The hint being shown, and how many frames it has left. */
-  hint: { text: string; frames: number } | null
   /**
    * The boss bowl: exactly one screen of the level's right-hand end.
    *
@@ -95,6 +85,15 @@ export interface World {
   solidScratch: Box[]
 }
 
+export interface Hint extends HintDef {
+  radius: number
+  /** Frames left on screen; -1 once it has been shown and expired. */
+  frames: number
+  spent: boolean
+}
+
+export const HINT_FRAMES = 180
+
 /** Collectible footprints, centred in their tile. Generous, not pixel-exact. */
 const PICKUP_BOX: Record<PickupKind, number> = { inkBulb: 8, inkCore: 8, shell: 6, pearl: 8 }
 
@@ -126,11 +125,6 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
 
   const arena: Box | null = level.def.boss === undefined ? null : arenaBox(map)
 
-  const hints: Hint[] = level.entities
-    .filter((e): e is typeof e & { type: 'hint' } => e.type === 'hint')
-    // A tall, narrow trigger: you should get the prompt walking past at any
-    // height, and never get it twice for jumping over the same tile.
-    .map((e) => ({ text: e.text, x: e.x * T, y: 0, w: T, h: map.height * T, shown: false }))
 
   return {
     map,
@@ -140,8 +134,7 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     clams,
     boss: null,
     rocks: [],
-    hints,
-    hint: null,
+
     arena,
     bossActive: false,
     collapsed: new Set(),
@@ -150,6 +143,7 @@ export function createWorld(source: LevelDef | LoadedLevel): World {
     spawn,
     checkpoint: null,
     exit: level.exit ? { x: level.exit.x * T, y: level.exit.y * T, w: T, h: T } : null,
+    hints: (level.def.hints ?? []).map((h) => ({ ...h, radius: h.radius ?? 5, frames: 0, spent: false })),
     frame: 0,
     cleared: false,
     respawnTimer: 0,
@@ -233,7 +227,7 @@ export function update(w: World, input: InputFrame): void {
 
   collectPickups(w)
   checkCheckpoints(w)
-  checkHints(w)
+  tickHints(w)
 
   // The exit only counts once the King is finished. A level with a boss ends
   // with the boss, not with a door behind him.
@@ -320,6 +314,7 @@ function tickCrumble(w: World): void {
   }
 }
 
+
 function collectPickups(w: World): void {
   for (const pick of w.pickups) {
     if (pick.taken || !w.player.alive || !boxesOverlap(w.player, pick)) continue
@@ -358,19 +353,22 @@ function collectPickups(w: World): void {
  * One-time key hints. PRD §11.3: no tutorial screens, no text boxes, and these
  * are the only words in the game.
  *
- * Once ever, per run of the level — a player who has seen `[X] INK DASH` does
- * not need telling again, and a prompt that reappears reads as a nag.
+ * Shown once each, on approach, for three seconds. A prompt that reappears
+ * reads as a nag, so `spent` is never cleared — not even by a respawn.
  */
-function checkHints(w: World): void {
-  if (w.hint) {
-    w.hint.frames--
-    if (w.hint.frames <= 0) w.hint = null
-  }
-  if (!w.player.alive) return
-  for (const h of w.hints) {
-    if (h.shown || !boxesOverlap(w.player, h)) continue
-    h.shown = true
-    w.hint = { text: h.text, frames: HINT_FRAMES }
+function tickHints(w: World): void {
+  const cx = w.player.x + w.player.w / 2
+  const cy = w.player.y + w.player.h / 2
+  for (const hint of w.hints) {
+    if (hint.frames > 0) {
+      hint.frames--
+      if (hint.frames === 0) hint.spent = true
+      continue
+    }
+    if (hint.spent || !w.player.alive) continue
+    const near =
+      Math.abs(cx - (hint.tx * T + T / 2)) <= hint.radius * T && Math.abs(cy - (hint.ty * T + T / 2)) <= hint.radius * T
+    if (near) hint.frames = HINT_FRAMES
   }
 }
 
@@ -447,4 +445,4 @@ export function resetWorld(source: LevelDef | LoadedLevel): World {
 }
 
 export { Tile }
-export type { LevelDef, LoadedLevel }
+export type { HintDef, LevelDef, LoadedLevel }

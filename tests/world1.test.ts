@@ -6,7 +6,7 @@ import { tilesetOf } from '../src/content/tilesets/index.js'
 import { Tile, tileAt } from '../src/game/tilemap.js'
 import { createWorld, HINT_FRAMES, update } from '../src/game/world.js'
 import { RULES } from '../src/game/constants.js'
-import { blank } from './helpers.js'
+import { blank, TILE } from './helpers.js'
 
 const level = loadCampaignLevel(tidepools)
 const count = (type: string) => level.entities.filter((e) => e.type === type).length
@@ -187,29 +187,40 @@ describe('the collectibles', () => {
 })
 
 describe('the only words in the game', () => {
-  /** PRD §11.3: no tutorial screens, no text boxes. One key hint, once ever. */
-  test('the dash hint sits at the gap it explains', () => {
-    const hints = level.entities.filter((e): e is typeof e & { type: 'hint' } => e.type === 'hint')
-    expect(hints).toHaveLength(1)
-    expect(hints[0]!.text).toBe('[X] INK DASH')
-    expect(hints[0]!.x).toBeGreaterThan(6)
-    expect(hints[0]!.x).toBeLessThan(14)
+  /** PRD §11.3: no tutorial screens, no text boxes. Key hints, once each. */
+  test('the prompts sit at the lessons they name', () => {
+    const hints = tidepools.hints ?? []
+    expect(hints.map((h) => h.text)).toEqual(['[X] INK DASH', 'HOLD \u2191 + X TO DASH UP'])
+    // The dash prompt is at A1's gap; the up-dash prompt is at A2's first ledge.
+    expect(hints[0]!.tx).toBeGreaterThan(6)
+    expect(hints[0]!.tx).toBeLessThan(14)
+    expect(hints[1]!.tx).toBeGreaterThan(28)
+    expect(hints[1]!.tx).toBeLessThan(34)
   })
 
-  test('it shows once, for three seconds, and never again', () => {
+  test('each shows once, for three seconds, and never again', () => {
     const w = createWorld(level)
     const hint = w.hints[0]!
-    w.player.x = hint.x
+    w.player.x = hint.tx * TILE
+    w.player.y = hint.ty * TILE
     update(w, blank())
-    expect(w.hint?.text).toBe('[X] INK DASH')
+    expect(hint.frames).toBeGreaterThan(0)
 
     for (let i = 0; i < HINT_FRAMES + 2; i++) update(w, blank())
-    expect(w.hint).toBeNull()
+    expect(hint.frames).toBe(0)
+    expect(hint.spent).toBe(true)
 
     // Walk back over it: nothing. A prompt that reappears reads as a nag.
-    w.player.x = hint.x
+    w.player.x = hint.tx * TILE
+    w.player.y = hint.ty * TILE
     update(w, blank())
-    expect(w.hint).toBeNull()
+    expect(hint.frames).toBe(0)
+  })
+
+  test('a hint out of range stays quiet', () => {
+    const w = createWorld(level)
+    for (let i = 0; i < 30; i++) update(w, blank())
+    expect(w.hints[1]!.frames).toBe(0)
   })
 })
 

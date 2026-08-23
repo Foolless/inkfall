@@ -46,14 +46,15 @@ how v1 is built.
 ```bash
 npm install
 npm run dev       # World 1, at http://localhost:5173
-npm run verify    # typecheck + lint + 496 unit tests + build + bundle size
+npm run verify    # typecheck + lint + 521 unit tests + build + bundle size
 npm run smoke     # 8 Playwright browser tests
 ```
 
 `npm run dev` also serves the sprite editor at `/tools/sprite-editor/`, and
 `?level=greybox` reaches the Phase 1 proving ground.
 
-**Arrows/WASD** move, **Space** jumps, **Shift** runs, **X** is the ink dash, **Esc**
+**Arrows/WASD** move, **Space** jumps, **Shift** runs, **X** is the ink dash — *hold a
+direction to aim it*, including **↑** for the up-dash and **↑+→** for diagonals. **Esc**
 pauses, **M** mutes, **R** restarts, **F1** opens the debug overlay (hitboxes, velocity,
 frame-time graph).
 

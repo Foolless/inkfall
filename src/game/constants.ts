@@ -50,6 +50,15 @@ export const INK = {
   DASH_CARRYOVER: 0.72, // [tuned] was 0.60
   DASH_COOLDOWN: 10,
   DASH_IFRAMES: 4,
+  /**
+   * Frames a vertical direction stays "live" for aiming a dash after release.
+   *
+   * Gate 1 finding: players pressed X expecting to gain height and got a
+   * horizontal dash, because the direction is sampled on the exact frame X goes
+   * down. Only the vertical axis is buffered -- horizontal already falls back
+   * to facing, which is almost always what the player wanted anyway.
+   */
+  DASH_DIR_BUFFER: 6,
   REFILL_GROUND: 45,
   REFILL_WATER: 20,
   REFILL_AIR: Infinity, // disabled by design: hang time must not be farmable

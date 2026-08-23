@@ -5,7 +5,7 @@
 Companion to [PRD.md](PRD.md), which says *what* the game is. This says how it gets built,
 in what order, and how we know each piece actually works.
 
-**Status:** ✅ Phase 1 complete — awaiting Gate 1
+**Status:** Phase 1 complete and deployed — Gate 1 run once, one finding fixed, awaiting a re-test
 ✅ Phase 2 built — awaiting Gate 2
 **Last updated:** 2026-08-23
 
@@ -40,7 +40,7 @@ smoke test and human eyes. Chasing coverage through draw calls is wasted effort.
 
 | Phase | What it produces | Exit gate | Rough effort |
 |---|---|---|---|
-| **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — *pending* | 8–12 days |
+| **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — *round 1 done, one fix applied, re-testing* | 8–12 days |
 | **2 · One Real Level** ✅ | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min — *pending* | 12–18 days |
 | **3 · All Five Levels** | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier | 20–30 days |
 | **4 · Meta & Ship** | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB | 15–22 days |
@@ -91,6 +91,34 @@ the remaining airtime. Level design may lean on the window, not the instant.
 This phase deliberately produces something ugly. Grey boxes, no art, no enemies, no sound.
 If the movement is not fun with nothing in it, no amount of content will save it — and this
 is the cheapest possible moment to find that out.
+
+### Gate 1, round one
+
+**Verdict: "needs a double jump or dash upwards, rest is fine."**
+
+The build already had an up-dash — `↑` + `X`, reaching nearly eight tiles. The
+finding was **discoverability, not capability**, which is the more useful result
+of the two: a mechanic the player cannot find does not exist, and no amount of
+tuning fixes a control nobody tries.
+
+Three changes, in descending order of how much each would have prevented it:
+
+1. **The grey box now gates on it, ten seconds in.** A five-tile face with no way
+   around, with recovery ground beneath so a miss costs a retry rather than a
+   life. Geometry teaches; it was previously buried at the far end of the level,
+   where a player would quit before ever meeting it.
+2. **One text prompt** — `HOLD ↑ + X TO DASH UP` — shown once on approach, for
+   180 frames, never again. The PRD allows exactly this and nothing more.
+3. **Vertical aim is buffered six frames**, so `↑` released just before `X` still
+   dashes up. Those two keys essentially never land on the same frame from a real
+   keyboard, and a one-frame gap silently produced a horizontal dash.
+
+Building the gate surfaced a level-design rule worth more than the fix: **a
+diagonal dash delivers only ~71% of its speed per axis.** A player moving right
+holds Right, so their up-dash is really an up-right dash reaching ~6.3 tiles, not
+7.9. The gate was six tiles and unclearable without releasing Right first —
+punishing the player for holding the direction they were travelling in. Vertical
+gates are now authored against the diagonal figure, and that is in the PRD.
 
 ### Checkpoints
 
@@ -169,7 +197,7 @@ Building one level completely, rather than five levels partially, is what surfac
 expensive unknowns: how long a sprite really takes, whether the synth sounds acceptable,
 whether the save system holds. Better to learn all of that once than five times.
 
-**Built.** All ten checkpoints are green: 496 unit tests, 8 browser smoke tests, 29 kB
+**Built.** All ten checkpoints are green: 521 unit tests, 8 browser smoke tests, 29 kB
 gzipped. Gate 2 is the remaining step, and it needs a stranger.
 
 ### What Phase 2 surfaced
@@ -184,6 +212,15 @@ The tests earned their keep again, and so did looking at the screen.
 | **A straight-line reachability check can never land on a thin slab** | `reach.ts` | The line to any one-tile platform passes through the platform. Paths are now checked as an L — rise, then travel. |
 | **Pearl 3 was reachable without Deep Jet** | World 1 C1 | Which would have made the backtracking engine decorative. The gap is now over a bed of urchins with no footing, at fifteen tiles. |
 | **The boss arena was anchored to the map, not the floor** | `world.ts` | The King spawned inside the sand and the locked camera pointed at bedrock. The floor probe also scanned downward, which finds a platform, not a floor. |
+
+**One thing merged rather than built.** Gate 1's round-one fix added a hint
+system to `LevelDef` at the same time Phase 2 independently added one as an
+entity type. Two implementations of one idea is exactly what the authoring-split
+rule exists to prevent, so the trunk's won: hints are a `hints: HintDef[]` field
+anchored to a tile with a radius, not entities. A key prompt is a caption on a
+room, and a caption has no box to collide with. World 1 carries two — the dash
+at A1's gap and the up-dash at A2's first ledge — and Gate 1's finding is why
+the second one exists at all.
 
 Two deviations from the PRD, both recorded in its decisions log:
 

@@ -48,6 +48,11 @@ export const tidepools: LevelDef = {
   chapter: 'shallows',
   order: 10,
   par: 240,
+  // The only words in the game (PRD §11.3), each placed at the lesson it names.
+  hints: [
+    { tx: 11, ty: 18, text: '[X] INK DASH', radius: 4 },
+    { tx: 31, ty: 18, text: 'HOLD \u2191 + X TO DASH UP', radius: 4 },
+  ],
   // legend: '.' empty  '#' solid  '-' oneway  '~' water  '^' hazard
   //         'c' crumble  '>' '<' 'u' 'd' currents  '=' slick
   //         'S' start  'E' exit  'K' checkpoint
@@ -80,9 +85,6 @@ export const tidepools: LevelDef = {
     '##############.....##############.######.######.########################################################################################......####......###############################################################################.................###########.....##.....##.....##......##################################',
   ],
   entities: [
-    // The only words in the game (PRD §11.3), placed where the lesson is.
-    { type: 'hint', x: 10, y: 18, text: '[X] INK DASH' },
-
     // A1 — shells lay the path toward the gap.
     { type: 'shell', x: 6, y: 18 },
     { type: 'shell', x: 9, y: 18 },

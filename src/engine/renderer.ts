@@ -93,7 +93,7 @@ export class Renderer {
     this.drawBoss(w, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
     // Only while playing: a key hint has no business on top of a tally screen.
-    if (s.screen === 'playing') this.drawHint(w, ox, oy)
+    if (s.screen === 'playing') this.drawHints(w, ox, oy)
     this.drawHud(s)
 
     if (s.screen === 'paused') drawPause(ctx)
@@ -387,26 +387,27 @@ export class Renderer {
    * looking.
    */
   /**
-   * The one-time key hint, drawn small and near Nib.
+   * One-time key prompts, drawn at the geometry that needs them.
    *
-   * PRD §11.3: no tutorial screens, no text boxes. It follows him rather than
-   * sitting in a corner, because a prompt you have to look away to read is a
-   * prompt you read while walking into a Snapper.
+   * The only text the game shows during play, and it is anchored to the room
+   * rather than to Nib: the prompt is a caption on the thing in front of him,
+   * so it should stay put while he moves.
    */
-  private drawHint(w: World, ox: number, oy: number): void {
-    if (!w.hint) return
+  private drawHints(w: World, ox: number, oy: number): void {
     const { ctx } = this
-    const p = w.player
-    const x = clamp(Math.floor(p.x - ox + p.w / 2), 40, DISPLAY.WIDTH - 40)
-    const y = clamp(Math.floor(p.y - oy) - 16, 22, DISPLAY.HEIGHT - 20)
+    for (const hint of w.hints) {
+      if (hint.frames <= 0) continue
+      const width = textWidth(hint.text)
+      const x = clamp(Math.floor(hint.tx * T + T / 2 - ox), width / 2 + 4, DISPLAY.WIDTH - width / 2 - 4)
+      const y = clamp(Math.floor(hint.ty * T - oy) - 12, 22, DISPLAY.HEIGHT - 20)
 
-    // It fades out rather than vanishing mid-word.
-    const alpha = Math.min(1, w.hint.frames / 20)
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = 'rgba(5,9,15,0.72)'
-    ctx.fillRect(x - textWidth(w.hint.text) / 2 - 3, y - 2, textWidth(w.hint.text) + 6, 11)
-    drawTextCentred(ctx, w.hint.text, x, y, SHARED.UI_TEXT)
-    ctx.globalAlpha = 1
+      // Fade over the last half-second rather than vanishing mid-read.
+      ctx.globalAlpha = Math.min(1, hint.frames / 30)
+      ctx.fillStyle = 'rgba(5,9,15,0.85)'
+      ctx.fillRect(x - width / 2 - 3, y - 2, width + 6, 11)
+      drawTextCentred(ctx, hint.text, x, y, SHARED.INK_CYAN)
+      ctx.globalAlpha = 1
+    }
   }
 
   private drawHud(s: Session): void {
