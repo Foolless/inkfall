@@ -90,6 +90,35 @@ export function drawLevelClear(ctx: CanvasRenderingContext2D, s: Session): void 
   if (pulse(s.tallyClock)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, H - 12, SHARED.UI_TEXT)
 }
 
+/**
+ * The end of the game. The only screen with nothing after it.
+ *
+ * Deliberately quiet: a total, a pearl count, and the water it took to get
+ * here. §11.3 gives the game almost no words and this is not the place to
+ * start spending them.
+ */
+export function drawGameClear(ctx: CanvasRenderingContext2D, s: Session, pearls: number): void {
+  ctx.fillStyle = SHARED.VOID
+  ctx.fillRect(0, 0, W, H)
+
+  // The descent, run backwards: the surface at the top, the abyss at the
+  // bottom, and the whole of it behind the words.
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = i < 2 ? '#0d2029' : i < 4 ? '#173845' : SHALLOWS.SHALLOW_DEEP
+    ctx.globalAlpha = 0.1 + i * 0.05
+    ctx.fillRect(0, i * 30, W, 30)
+  }
+  ctx.globalAlpha = 1
+
+  drawTextCentred(ctx, 'THE ABYSS IS BEHIND YOU', W / 2, 40, SHARED.INK_CYAN, { scale: 1 })
+  drawTextCentred(ctx, `SCORE ${formatScore(s.score)}`, W / 2, 70, SHARED.UI_TEXT, { scale: 2 })
+  drawTextCentred(ctx, `PEARLS ${pearls} OF 15`, W / 2, 96, SHARED.PEARL)
+  drawTextCentred(ctx, `TIME ${formatTime(s.levelFrames)}`, W / 2, 110, SHARED.UI_DIM)
+
+  if (pearls < 15) drawTextCentred(ctx, 'SOMETHING IS STILL DOWN THERE', W / 2, 132, SHARED.UI_DIM)
+  if (pulse(s.uiFrames)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, H - 16, SHARED.UI_TEXT)
+}
+
 export function drawGameOver(ctx: CanvasRenderingContext2D, s: Session): void {
   dim(ctx, 0.88)
   drawTextCentred(ctx, 'GAME OVER', W / 2, 52, '#e0705c', { scale: 2 })

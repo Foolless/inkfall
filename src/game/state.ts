@@ -12,9 +12,11 @@ import { Act, isPressed, type InputFrame } from '../engine/input.js'
 import { RULES } from './constants.js'
 import { clearTally, tallyTotal, type ClearSummary, type TallyLine } from './score.js'
 import { createWorld, update as updateWorld, type World } from './world.js'
+import { campaign, grantedBy } from '../content/levels/index.js'
+import { UPGRADE_BIT, type UpgradeId } from './upgrades.js'
 import type { LevelDef } from '../content/levels/format.js'
 
-export type Screen = 'title' | 'playing' | 'paused' | 'levelClear' | 'gameOver'
+export type Screen = 'title' | 'playing' | 'paused' | 'levelClear' | 'gameOver' | 'gameClear'
 
 /** How many frames the tally holds between lines as it counts up. */
 export const TALLY_LINE_FRAMES = 24
@@ -45,6 +47,21 @@ export interface Session {
   noDamage: boolean
   noDeath: boolean
   /**
+   * Permanent upgrades this run holds, as a bitmask (§8.5).
+   *
+   * On the session rather than on the world, because they outlive the level:
+   * a continue rebuilds the world from scratch and the Cling you earned two
+   * worlds ago has to survive that.
+   */
+  upgrades: number
+  /**
+   * Upgrades earned since the last save, waiting to be written.
+   *
+   * Drained by the host, like `pendingSave` — the state machine flags, and
+   * something outside it touches storage.
+   */
+  granted: UpgradeId[]
+  /**
    * Frames since the session began, ticking on every screen.
    *
    * Menus need a clock and the world's does not run on the title, so this is
@@ -65,11 +82,17 @@ export interface Session {
 /** Par clocks are per level; this is what an unauthored one falls back to. */
 export const DEFAULT_PAR_SECONDS = 300
 
-export function createSession(level: LevelDef): Session {
+export interface SessionOptions {
+  /** What the player already holds, from their save. */
+  upgrades?: number
+}
+
+export function createSession(level: LevelDef, options: SessionOptions = {}): Session {
+  const upgrades = options.upgrades ?? 0
   return {
     screen: 'title',
     level,
-    world: createWorld(level),
+    world: createWorld(level, { upgrades }),
     lives: RULES.START_LIVES,
     continues: RULES.CONTINUES,
     score: 0,
@@ -80,6 +103,8 @@ export function createSession(level: LevelDef): Session {
     tallyClock: 0,
     noDamage: true,
     noDeath: true,
+    upgrades,
+    granted: [],
     uiFrames: 0,
     pendingSave: false,
   }
@@ -113,11 +138,16 @@ export function updateSession(s: Session, input: InputFrame): void {
       if (s.continues > 0) useContinue(s)
       else s.screen = 'title'
       return
+    case 'gameClear':
+      // The end of the game, and the only screen with nothing after it. A
+      // confirm goes back to the title with everything earned still earned.
+      if (confirmed(input) && s.uiFrames > 60) s.screen = 'title'
+      return
   }
 }
 
 function startRun(s: Session): void {
-  s.world = createWorld(s.level)
+  s.world = createWorld(s.level, { upgrades: s.upgrades })
   s.lives = RULES.START_LIVES
   s.continues = RULES.CONTINUES
   s.score = 0
@@ -142,7 +172,7 @@ function beginLevel(s: Session): void {
  */
 function useContinue(s: Session): void {
   s.continues--
-  s.world = createWorld(s.level)
+  s.world = createWorld(s.level, { upgrades: s.upgrades })
   s.lives = RULES.START_LIVES
   beginLevel(s)
   s.screen = 'playing'
@@ -167,6 +197,12 @@ function stepLevel(s: Session, input: InputFrame): void {
   }
 
   if (w.player.tier < tierBefore) s.noDamage = false
+
+  // Deep Jet is banked the instant it is picked up, not on the level clear.
+  // Dying with it in your hand and losing it would be the single worst thing
+  // this game could do to someone, and §7.6 B2 is a third of the way through
+  // the last level.
+  bankUpgrades(s, w.earned)
 
   chargeDeaths(s)
   if (s.screen !== 'playing') return
@@ -208,12 +244,66 @@ function clearLevel(s: Session): void {
   s.screen = 'levelClear'
 }
 
+/**
+ * Move earned upgrades from the world into the run, once each.
+ *
+ * The world raises them and the session banks them; nothing here writes to
+ * storage. Draining the list rather than reading it means a respawn cannot
+ * grant the same nodule twice.
+ */
+function bankUpgrades(s: Session, earned: UpgradeId[]): void {
+  if (earned.length === 0) return
+  for (const id of earned) {
+    if ((s.upgrades & UPGRADE_BIT[id]) !== 0) continue
+    s.upgrades |= UPGRADE_BIT[id]
+    s.granted.push(id)
+  }
+  earned.length = 0
+  s.pendingSave = true
+}
+
+/**
+ * The level is banked. Grant its upgrade and go to the next one.
+ *
+ * The chain is data: `grantedBy` and the campaign order decide what the player
+ * walks out with and where they walk to, so a sixth level is an entry in the
+ * registry and nothing else (§12.7's no-per-level-code rule).
+ *
+ * A level outside the campaign — the grey box — simply returns to the title.
+ * It is a proving ground, not content, and it grants nothing.
+ */
 function finishLevel(s: Session): void {
   s.score += tallyTotal(s.tally)
   s.pendingSave = true
-  // One level in Phase 2, so clearing it ends the run. The world map picks this
-  // up in Phase 4 and sends the player to the next node instead.
-  s.screen = 'title'
+
+  const grant = grantedBy(s.level.id)
+  if (grant !== undefined) bankUpgrades(s, [grant])
+
+  const order = campaign().findIndex((d) => d.id === s.level.id)
+  if (order < 0) {
+    s.screen = 'title'
+    return
+  }
+
+  const next = campaign()[order + 1]
+  if (!next) {
+    // The last world is cleared. There is nothing after this.
+    s.screen = 'gameClear'
+    s.uiFrames = 0
+    return
+  }
+
+  s.level = next
+  s.world = createWorld(next, { upgrades: s.upgrades })
+  beginLevel(s)
+  s.screen = 'playing'
+}
+
+/** The next level in the campaign, or null at the end of the game. */
+export function nextLevel(id: string): LevelDef | null {
+  const order = campaign().findIndex((d) => d.id === id)
+  if (order < 0) return null
+  return campaign()[order + 1] ?? null
 }
 
 /** How many tally lines have counted up so far. */

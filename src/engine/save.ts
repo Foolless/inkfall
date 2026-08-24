@@ -331,6 +331,32 @@ export function recordClear(
   }
 }
 
+/**
+ * Bank permanent upgrades. PRD §8.5: they are kept, never lost.
+ *
+ * Additive and idempotent. Nothing in the game takes an upgrade away, so this
+ * only ever grows the list — a run that skips a level cannot un-grant what an
+ * earlier run earned.
+ */
+export function recordUpgrades(data: SaveData, ids: readonly string[]): SaveData {
+  const upgrades = [...data.progress.upgrades]
+  for (const id of ids) if (!upgrades.includes(id)) upgrades.push(id)
+  if (upgrades.length === data.progress.upgrades.length) return data
+  return { ...data, progress: { ...data.progress, upgrades } }
+}
+
+/**
+ * Unlock a level. Clearing one opens the next, and unlocking is permanent.
+ *
+ * Kept separate from `recordClear` because they answer different questions —
+ * "have I finished this" and "may I start this" — and Phase 4's world map
+ * reads the second without caring about the first.
+ */
+export function recordUnlock(data: SaveData, levelId: string): SaveData {
+  if (data.progress.unlocked.includes(levelId)) return data
+  return { ...data, progress: { ...data.progress, unlocked: [...data.progress.unlocked, levelId] } }
+}
+
 /** Top ten, highest first. Ties keep the earlier entry, which arrived first. */
 export function recordHighScore(data: SaveData, entry: HighScore): SaveData {
   const highScores = [...data.records.highScores, entry].sort((a, b) => b.score - a.score).slice(0, 10)

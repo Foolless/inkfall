@@ -60,12 +60,12 @@ test('respawn restores Full — never Spent, never Charged', async ({ page }) =>
 })
 
 /**
- * The whole shell, driven from the keyboard: title, play, clear, back to the
- * title. This is the class of bug unit tests structurally cannot catch — a
- * screen the state machine can reach but that never renders, or a key the
- * browser swallows before the simulation sees it.
+ * The whole shell, driven from the keyboard: title, play, clear, and straight
+ * into the next world. This is the class of bug unit tests structurally cannot
+ * catch — a screen the state machine can reach but that never renders, or a key
+ * the browser swallows before the simulation sees it.
  */
-test('title to play to level clear and back, without touching the console', async ({ page }) => {
+test('title to play to level clear to the next world, without touching the console', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
@@ -82,15 +82,35 @@ test('title to play to level clear and back, without touching the console', asyn
   await page.keyboard.press('Escape')
   await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
 
+  expect(await page.evaluate(() => window.__inkfall!.level())).toBe('w01-tidepools')
   await page.evaluate(() => window.__inkfall!.clear())
   await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
 
   await page.waitForTimeout(600)
   await page.keyboard.press('Space')
-  await page.waitForFunction(() => window.__inkfall!.screen() === 'title')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
 
+  // Clearing World 1 grants the Ink Shot and opens World 2 — the first link of
+  // the chain that makes five levels one game.
+  expect(await page.evaluate(() => window.__inkfall!.level())).toBe('w02-kelp')
+  expect(await page.evaluate(() => window.__inkfall!.upgrades())).toContain('inkShot')
   expect(await page.evaluate(() => window.__inkfall!.score())).toBeGreaterThan(0)
   expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/** The chapter owns the music, so crossing into a new world changes the track. */
+test('the theme follows the chapter across a world boundary', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.audio().started)
+  expect(await page.evaluate(() => window.__inkfall!.audio().playing)).toBe('world1')
+
+  await page.evaluate(() => window.__inkfall!.clear())
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
+  await page.waitForTimeout(600)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.audio().playing === 'world2')
 })
 
 /**

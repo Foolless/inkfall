@@ -4,11 +4,22 @@ import { DebugOverlay } from './engine/debug.js'
 import { Keyboard } from './engine/input.js'
 import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
-import { levelDef, tidepools } from './content/levels/index.js'
+import { campaign, levelDef } from './content/levels/index.js'
 import { bossCameraLock } from './game/world.js'
-import { createSession, updateSession } from './game/state.js'
+import { createSession, nextLevel, updateSession } from './game/state.js'
+import type { LevelDef } from './content/levels/format.js'
 import { kill } from './game/player.js'
-import { loadSave, recordClear, recordHighScore, writeSave, type SaveData } from './engine/save.js'
+import {
+  loadSave,
+  recordClear,
+  recordHighScore,
+  recordUnlock,
+  recordUpgrades,
+  totalPearls,
+  writeSave,
+  type SaveData,
+} from './engine/save.js'
+import { idsOf, maskOf } from './game/upgrades.js'
 import { Audio, type Cue } from './engine/audio/sfx.js'
 import { trackFor } from './content/music/world1.js'
 import { chapterOf } from './content/chapters.js'
@@ -28,26 +39,7 @@ keyboard.attach(window)
 // box is a development tool and not content.
 const params = new URLSearchParams(window.location.search)
 const requested = params.get('level')
-const level = requested === null ? tidepools : levelDef(requested)
-
-const session = createSession(level)
-const audio = new Audio()
-
-/**
- * Audio cannot start until the player has touched something (PRD §10.4), which
- * is exactly what the title screen's "PRESS SPACE" is for. Everything before
- * that point queues nothing and simply makes no sound.
- */
-function startAudio(): void {
-  if (audio.started) return
-  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!Ctor) return
-  audio.start(new Ctor())
-  const track = trackFor(chapterOf(level.chapter).music)
-  if (track) audio.playMusic(track)
-}
-window.addEventListener('keydown', startAudio, { once: true })
-window.addEventListener('pointerdown', startAudio, { once: true })
+const startLevel = requested === null ? campaign()[0]! : levelDef(requested)
 
 // Progress is loaded once at boot. `writable` is false when the file was
 // unreadable or came from a newer build — in both cases the game is playable
@@ -57,6 +49,34 @@ let save: SaveData = loaded.data
 const canWrite = loaded.writable
 if (loaded.message) showToast(loaded.message)
 
+// Upgrades are permanent (§8.5), so a run starts with whatever the save says
+// this player has already earned — including on a second playthrough.
+const session = createSession(startLevel, { upgrades: maskOf(save.progress.upgrades) })
+const audio = new Audio()
+
+/**
+ * Audio cannot start until the player has touched something (PRD §10.4), which
+ * is exactly what the title screen's "PRESS SPACE" is for. Everything before
+ * that point queues nothing and simply makes no sound.
+ *
+ * The theme follows the *chapter*, so crossing into a new world changes the
+ * track without anything here knowing which levels exist.
+ */
+function startAudio(): void {
+  if (audio.started) return
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctor) return
+  audio.start(new Ctor())
+  playChapterTheme()
+}
+function playChapterTheme(): void {
+  if (!audio.started) return
+  const track = trackFor(chapterOf(session.level.chapter).music)
+  if (track) audio.playMusic(track)
+}
+window.addEventListener('keydown', startAudio, { once: true })
+window.addEventListener('pointerdown', startAudio, { once: true })
+
 function showToast(message: string): void {
   const el = document.getElementById('toast')
   if (!el) return
@@ -65,18 +85,33 @@ function showToast(message: string): void {
   window.setTimeout(() => (el.hidden = true), 8_000)
 }
 
-function persist(): void {
+/**
+ * Bank whatever the session says is worth banking.
+ *
+ * Called with the level that was *just* finished, because by the time the flag
+ * is seen the session has already moved on to the next one — clearing World 2
+ * and finding yourself in World 3 is one frame, and the pearls belong to the
+ * world behind you.
+ */
+function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number, deaths: number): void {
   if (!canWrite) return
-  save = recordClear(save, level.id, {
-    pearls: session.world.pearls,
-    seconds: session.levelFrames / 60,
-  })
+
+  // Upgrades first: they are the thing whose loss would cost the most, and
+  // they are banked even when nothing else about the run is worth recording.
+  if (session.granted.length > 0) {
+    save = recordUpgrades(save, session.granted)
+    session.granted.length = 0
+  }
+
+  save = recordClear(save, finished.id, { pearls, seconds })
+  const next = nextLevel(finished.id)
+  if (next) save = recordUnlock(save, next.id)
   save = recordHighScore(save, {
     score: session.score,
     character: save.characters.selected,
     date: new Date().toISOString().slice(0, 10),
     levelsCleared: save.progress.cleared.length,
-    deaths: session.world.player.deaths,
+    deaths,
   })
   writeSave(window.localStorage, save)
 }
@@ -92,7 +127,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyR' && session.screen === 'playing') {
     e.preventDefault()
-    session.world = createSession(level).world
+    session.world = createSession(session.level, { upgrades: session.upgrades }).world
     session.levelFrames = 0
     session.deathsCharged = session.world.player.deaths
   }
@@ -106,13 +141,23 @@ startLoop({
   update: () => {
     const input = keyboard.snapshot()
     const screenBefore = session.screen
+    const levelBefore = session.level
+    // Snapshot what the finishing level is owed, before the session advances.
+    const owed = {
+      pearls: [...session.world.pearls],
+      seconds: session.levelFrames / 60,
+      deaths: session.world.player.deaths,
+    }
+
     updateSession(session, input)
     for (const cue of session.world.cues) audio.play(cue as Cue)
     if (session.screen !== screenBefore) audio.play('menu')
     if (session.pendingSave) {
       session.pendingSave = false
-      persist()
+      persist(levelBefore, owed.pearls, owed.seconds, owed.deaths)
     }
+    // A new world is a new chapter, and a chapter owns the music.
+    if (session.level !== levelBefore) playChapterTheme()
     // Animation advances on the simulation step, not the render, so a cycle
     // never speeds up on a fast display or stutters on a slow one.
     updateAnim(anim, session.world.player)
@@ -123,7 +168,7 @@ startLoop({
     // sees is a stutter everybody hears.
     audio.update()
     updateCamera(camera, session.world.player, session.world.map, bossCameraLock(session.world))
-    renderer.draw(session, camera, anim)
+    renderer.draw(session, camera, anim, totalPearls(save))
     debug.draw(renderer.ctx, session.world, camera)
   },
 })
@@ -140,6 +185,8 @@ declare global {
       lives: () => number
       score: () => number
       pearls: () => number
+      level: () => string
+      upgrades: () => string[]
       reset: () => void
       kill: () => void
       clear: () => void
@@ -156,7 +203,7 @@ window.__inkfall = {
   lives: () => session.lives,
   score: () => session.score + session.world.score,
   reset: () => {
-    session.world = createSession(level).world
+    session.world = createSession(session.level, { upgrades: session.upgrades }).world
     session.deathsCharged = 0
   },
   kill: () => {
@@ -174,6 +221,8 @@ window.__inkfall = {
     session.world.player.vx = 0
     session.world.player.vy = 0
   },
-  pearls: () => save.progress.pearls[level.id]?.filter(Boolean).length ?? 0,
+  pearls: () => save.progress.pearls[session.level.id]?.filter(Boolean).length ?? 0,
+  level: () => session.level.id,
+  upgrades: () => idsOf(session.upgrades),
   audio: () => ({ started: audio.started, playing: audio.nowPlaying, muted: audio.muted }),
 }

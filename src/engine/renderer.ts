@@ -10,7 +10,7 @@ import { formatScore, formatTime, type Session } from '../game/state.js'
 import { SHARED } from '../content/palettes.js'
 import { drawText, drawTextCentred, drawTextRight, textWidth } from './text.js'
 import { clamp } from './camera.js'
-import { drawGameOver, drawLevelClear, drawPause, drawTitle } from './screens.js'
+import { drawGameClear, drawGameOver, drawLevelClear, drawPause, drawTitle } from './screens.js'
 import { chapterOf } from '../content/chapters.js'
 import { tilesetOf, type Tileset } from '../content/tilesets/index.js'
 import { PICKUP_SPRITES } from '../content/sprites/pickups.js'
@@ -91,12 +91,16 @@ export class Renderer {
     this.canvas.style.imageRendering = 'pixelated'
   }
 
-  draw(s: Session, cam: Camera, anim: Anim): void {
+  draw(s: Session, cam: Camera, anim: Anim, pearls = 0): void {
     const { ctx } = this
     ctx.imageSmoothingEnabled = false
 
     if (s.screen === 'title') {
       drawTitle(ctx, s)
+      return
+    }
+    if (s.screen === 'gameClear') {
+      drawGameClear(ctx, s, pearls)
       return
     }
 
