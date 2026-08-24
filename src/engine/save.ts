@@ -363,6 +363,34 @@ export function recordHighScore(data: SaveData, entry: HighScore): SaveData {
   return { ...data, records: { ...data.records, highScores } }
 }
 
+/** Every pearl in the game. Five levels of three (§8.3). */
+export const PEARLS_TOTAL = 15
+
+/**
+ * What collecting everything is worth. PRD §8.3.
+ *
+ * All fifteen pearls unlocks **Octo** and the true ending. Octo's *movement* is
+ * §8.6's post-1.0 work and is deliberately not built here — but the unlock is
+ * recorded now, because the alternative is asking players who finished the
+ * collection in v1 to do it again later. A flag costs nothing; a second
+ * playthrough costs an evening.
+ *
+ * Idempotent, like every other writer here: called on every clear, changes the
+ * save at most once.
+ */
+export function checkUnlocks(data: SaveData): SaveData {
+  if (totalPearls(data) < PEARLS_TOTAL) return data
+  const unlocked = data.characters.unlocked.includes('octo')
+    ? data.characters.unlocked
+    : [...data.characters.unlocked, 'octo']
+  if (unlocked === data.characters.unlocked && data.progress.trueEndingSeen) return data
+  return {
+    ...data,
+    characters: { ...data.characters, unlocked },
+    progress: { ...data.progress, trueEndingSeen: true },
+  }
+}
+
 export function pearlsFound(data: SaveData, levelId: string): number {
   return (data.progress.pearls[levelId] ?? []).filter(Boolean).length
 }

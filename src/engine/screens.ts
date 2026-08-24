@@ -204,7 +204,15 @@ export function drawGameClear(ctx: CanvasRenderingContext2D, s: Session, pearls:
   drawTextCentred(ctx, `PEARLS ${pearls} OF 15`, W / 2, 96, SHARED.PEARL)
   drawTextCentred(ctx, `TIME ${formatTime(s.levelFrames)}`, W / 2, 110, SHARED.UI_DIM)
 
-  if (pearls < 15) drawTextCentred(ctx, 'SOMETHING IS STILL DOWN THERE', W / 2, 132, SHARED.UI_DIM)
+  // The true ending (§8.3): what the fifteen pearls were for. Four short lines,
+  // because §11.3 gives the game almost no words and this is not the place to
+  // start spending them.
+  if (pearls >= 15) {
+    drawTextCentred(ctx, 'YOU CARRIED THEM ALL BACK UP', W / 2, 126, SHARED.PEARL)
+    drawTextCentred(ctx, 'FIFTEEN LIGHTS. FIFTEEN NAMES.', W / 2, 138, SHARED.UI_DIM)
+  } else {
+    drawTextCentred(ctx, 'SOMETHING IS STILL DOWN THERE', W / 2, 132, SHARED.UI_DIM)
+  }
   // §13: an assist run is stamped, never blocked. It says what the run was, in
   // the same breath as saying it was finished, and it is not an asterisk.
   if (s.assist) drawTextCentred(ctx, 'ASSIST', W / 2, 122, SHARED.UI_DIM)

@@ -459,7 +459,9 @@ Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go l
 | C3 | Second magma rise, this one with Eels in the walls and two mandatory Ink Bomb walls. Fastest ascent in the game. |
 | BOSS | The Vent Lord. |
 
-**Pearls:** ① off the side of the B1 climb — costs you ~3 seconds of magma lead. ② behind cracked crust an Ink Bomb opens, in an alcove off the climb *(v1.5: was inside a Snail's shell — where the shell stops sliding decided whether the pearl could be collected)*. ③ under a permanent magma pool at the bottom of C1 — **requires Heat Shell (W4, earned on this level's completion)**, so this is the first pearl a player is likely to realise they must come *back* for.
+**Pearls**, in the id order the level uses — ids run left to right along a level and are save-file keys, so they are stable forever (§12.7): ① off the side of the B1 climb, costing ~3 seconds of magma lead. ② under a permanent magma pool at the end of C1 — **requires Heat Shell (W4, earned on this level's completion)**, so this is the first pearl a player is likely to realise they must come *back* for. ③ behind cracked crust an Ink Bomb opens, in the C2 corridor.
+
+*v1.6: ② and ③ are the other way round from v1.4's listing. The magma pool is physically earlier in the level than the C2 corridor, and ids follow position. ③ was also "inside a Snail's shell" until v1.5 — a pearl that only exists when a specific enemy dies in a specific place needs a drop system the game does not have.*
 
 ### 7.6 Level 5 — The Abyss
 

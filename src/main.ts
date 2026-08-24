@@ -10,6 +10,7 @@ import { createSession, nextLevel, rebuild, setAssist, updateSession } from './g
 import type { LevelDef } from './content/levels/format.js'
 import { kill } from './game/player.js'
 import {
+  checkUnlocks,
   loadSave,
   recordClear,
   recordHighScore,
@@ -124,6 +125,9 @@ function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number
   save = recordClear(save, finished.id, { pearls, seconds })
   const next = nextLevel(finished.id)
   if (next) save = recordUnlock(save, next.id)
+  // The fifteenth pearl is worth something (§8.3), and it can be the last one
+  // found on any level — so this is checked on every clear, not on the last.
+  save = checkUnlocks(save)
   writeSave(window.localStorage, save)
 }
 
