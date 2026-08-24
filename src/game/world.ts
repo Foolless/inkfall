@@ -13,7 +13,15 @@ import {
   type Player,
   type PlayerStepContext,
 } from './player.js'
-import { enemySolids, isEnemyKind, spawnEnemy, updateEnemy, type Enemy, type EnemyKind } from './enemies/index.js'
+import {
+  enemySolids,
+  isEnemyKind,
+  spawnEnemy,
+  updateEnemy,
+  type Enemy,
+  type EnemyKind,
+  type EnemyStepContext,
+} from './enemies/index.js'
 import { resolveBossInk, resolveCombat } from './combat.js'
 import { livesEarned, POINTS } from './score.js'
 import {
@@ -129,6 +137,17 @@ export interface World {
   solidScratch: Box[]
   /** Reused buffer for the tiles an Ink Bomb opens. Same reason as above. */
   blastScratch: number[]
+  /**
+   * The player's and the enemies' step contexts, built once and mutated.
+   *
+   * §12.6 again. Both used to be object literals rebuilt every frame, and the
+   * enemy one carried two closures with them — the most expensive kind of
+   * per-frame garbage, because each one is a fresh function object.
+   */
+  playerCtx: PlayerStepContext
+  enemyCtx: EnemyStepContext
+  /** The level's checkpoint boxes, precomputed. They never move. */
+  checkpointBoxes: { box: Box; x: number; y: number }[]
 }
 
 /** What the caller already holds when the level starts. */
@@ -221,7 +240,7 @@ export function createWorld(source: LevelDef | LoadedLevel, options: WorldOption
   const collapsed = new Set<number>()
   openFusedTerrain(map, player, collapsed)
 
-  return {
+  const world: World = {
     map,
     player,
     pickups,
@@ -259,7 +278,37 @@ export function createWorld(source: LevelDef | LoadedLevel, options: WorldOption
     cues: [],
     solidScratch: [],
     blastScratch: [],
+    // Filled in below: both need the world object that is being built.
+    playerCtx: null as unknown as PlayerStepContext,
+    enemyCtx: null as unknown as EnemyStepContext,
+    checkpointBoxes: map.entities
+      .filter((e) => e.kind === 'checkpoint')
+      .map((e) => ({
+        box: { x: e.tx * T, y: e.ty * T, w: T, h: T },
+        x: e.tx * T + 2,
+        y: e.ty * T + 2,
+      })),
   }
+
+  world.playerCtx = {
+    map: world.map,
+    collapsed: world.collapsed,
+    crumbling: world.crumbling,
+    solids: world.solidScratch,
+    cues: world.cues,
+    flooded: false,
+    inMagma: false,
+  }
+  world.enemyCtx = {
+    map: world.map,
+    collapsed: world.collapsed,
+    player: world.player,
+    fire: (kind, x, y, vx, vy) => {
+      fire(world.projectiles, kind, x, y, vx, vy, false)
+    },
+    spawn: (kind, x, y) => spawnFromVent(world, kind, x, y),
+  }
+  return world
 }
 
 /**
@@ -323,33 +372,22 @@ export function update(w: World, input: InputFrame): void {
   // magma — a flood has a visible surface and does not need telling.
   if (w.frame % 150 === 0 && w.rises.some((r) => r.armed && r.fluid === 'magma')) w.cues.push('magma')
 
+  // The step contexts are built once per *world* and mutated here, not rebuilt
+  // every frame. PRD §12.6 asks for zero allocations in the update loop, and
+  // three object literals plus two closures at 60 Hz is a megabyte of garbage
+  // every few minutes — which arrives as one dropped frame at a time.
   const under = riseAt(w.rises, w.player)
-  const ctx: PlayerStepContext = {
-    map: w.map,
-    collapsed: w.collapsed,
-    crumbling: w.crumbling,
-    solids,
-    cues: w.cues,
-    flooded: under?.fluid === 'flood',
-    inMagma: under?.fluid === 'magma',
-  }
-  updatePlayer(ctx, w.player, input)
+  w.playerCtx.solids = solids
+  w.playerCtx.flooded = under?.fluid === 'flood'
+  w.playerCtx.inMagma = under?.fluid === 'magma'
+  updatePlayer(w.playerCtx, w.player, input)
   applyArenaForce(w)
   // After the player's own move, so a bubble caught on the way up overrides
   // the gravity that was applied to reach it.
   rideBubbles(w.bubbles, w.player)
   tryShoot(w, input)
 
-  const enemyCtx = {
-    map: w.map,
-    collapsed: w.collapsed,
-    player: w.player,
-    fire: (kind: Projectile['kind'], x: number, y: number, vx: number, vy: number) => {
-      fire(w.projectiles, kind, x, y, vx, vy, false)
-    },
-    spawn: (kind: EnemyKind, x: number, y: number) => spawnFromVent(w, kind, x, y),
-  }
-  if (!held(w)) for (const e of w.enemies) updateEnemy(enemyCtx, e)
+  if (!held(w)) for (const e of w.enemies) updateEnemy(w.enemyCtx, e)
 
   breakKnots(w)
   updateProjectiles(w.map, w.projectiles, w.collapsed)
@@ -698,13 +736,16 @@ function checkAssistCheckpoint(w: World): void {
   w.cues.push('checkpoint')
 }
 
+/**
+ * Boxes precomputed at load rather than rebuilt per entity per frame — a conch
+ * does not move, and this loop ran over every entity in the level sixty times a
+ * second allocating one box for each.
+ */
 function checkCheckpoints(w: World): void {
-  for (const e of w.map.entities) {
-    if (e.kind !== 'checkpoint') continue
-    const box: Box = { x: e.tx * T, y: e.ty * T, w: T, h: T }
-    if (!boxesOverlap(w.player, box)) continue
-    if (w.checkpoint?.x === box.x && w.checkpoint.y === box.y) continue
-    w.checkpoint = { x: e.tx * T + 2, y: e.ty * T + 2 }
+  for (const c of w.checkpointBoxes) {
+    if (!boxesOverlap(w.player, c.box)) continue
+    if (w.checkpoint?.x === c.x && w.checkpoint.y === c.y) continue
+    w.checkpoint = { x: c.x, y: c.y }
     w.cues.push('checkpoint')
   }
 }
