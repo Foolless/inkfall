@@ -1,4 +1,20 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+/**
+ * Confirm past a screen that ignores the key until it is ready.
+ *
+ * The level-clear tally gates its confirm on `tallyClock > TALLY_LINE_FRAMES`
+ * — a count of *simulation frames*, not wall time. On a loaded machine 600 ms
+ * of `waitForTimeout` is not 24 frames, and a single press lands on a screen
+ * that is still counting and is dropped. Pressing until the screen actually
+ * changes is the same user action and is not a race.
+ */
+async function confirmUntil(page: Page, screen: string): Promise<void> {
+  await expect(async () => {
+    await page.keyboard.press('Space')
+    expect(await page.evaluate(() => window.__inkfall!.screen())).toBe(screen)
+  }).toPass({ timeout: 10_000 })
+}
 
 /**
  * Browser smoke: does it load, run, respond to input, and survive a reload?
@@ -86,9 +102,7 @@ test('title to play to level clear to the next world, without touching the conso
   await page.evaluate(() => window.__inkfall!.clear())
   await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
 
-  await page.waitForTimeout(600)
-  await page.keyboard.press('Space')
-  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+  await confirmUntil(page, 'playing')
 
   // Clearing World 1 grants the Ink Shot and opens World 2 — the first link of
   // the chain that makes five levels one game.
@@ -108,8 +122,7 @@ test('the theme follows the chapter across a world boundary', async ({ page }) =
 
   await page.evaluate(() => window.__inkfall!.clear())
   await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
-  await page.waitForTimeout(600)
-  await page.keyboard.press('Space')
+  await confirmUntil(page, 'playing')
   await page.waitForFunction(() => window.__inkfall!.audio().playing === 'world2')
 })
 
@@ -125,9 +138,7 @@ test('clearing a level persists to localStorage and survives a reload', async ({
 
   await page.evaluate(() => window.__inkfall!.clear())
   await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
-  await page.waitForTimeout(600)
-  await page.keyboard.press('Space')
-  await page.waitForFunction(() => window.__inkfall!.screen() === 'title')
+  await confirmUntil(page, 'title')
 
   const stored = await page.evaluate(() => window.localStorage.getItem('inkfall.save.v1'))
   expect(stored, 'nothing was written to the save key').not.toBeNull()
