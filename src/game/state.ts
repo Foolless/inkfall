@@ -18,7 +18,7 @@ import { buildMap, furthestUnlocked, moveCursor, NO_PROGRESS, type MapNode, type
 import { createRecorder, finishRecording, resetRecorder, sample, type GhostRecorder, type GhostTrack } from './ghost.js'
 import type { LevelDef } from '../content/levels/format.js'
 
-export type Screen = 'title' | 'worldMap' | 'playing' | 'paused' | 'levelClear' | 'gameOver' | 'gameClear'
+export type Screen = 'title' | 'worldMap' | 'scores' | 'playing' | 'paused' | 'levelClear' | 'gameOver' | 'gameClear'
 
 /** How many frames the tally holds between lines as it counts up. */
 export const TALLY_LINE_FRAMES = 24
@@ -287,10 +287,21 @@ export function updateSession(s: Session, input: InputFrame): void {
   s.uiFrames++
   switch (s.screen) {
     case 'title':
+      // §11.1 puts Scores on the title. One key rather than a menu: the game
+      // has two things to look at from here and a cursor for two rows is
+      // furniture, not navigation.
+      if (isPressed(input, Act.Down)) {
+        s.screen = 'scores'
+        s.uiFrames = 0
+        return
+      }
       if (confirmed(input)) {
         if (s.direct) startRun(s)
         else openMap(s)
       }
+      return
+    case 'scores':
+      if (confirmed(input) && s.uiFrames > 20) s.screen = 'title'
       return
     case 'worldMap':
       stepMap(s, input)

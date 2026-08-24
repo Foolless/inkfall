@@ -9,9 +9,10 @@ import { bubbleBox, clamState, isTelegraphing, pressureLoad } from '../game/haza
 import { formatScore, formatTime, runFramesNow, type Session } from '../game/state.js'
 import { ghostAt } from '../game/ghost.js'
 import { SHARED } from '../content/palettes.js'
+import type { HighScore } from './save.js'
 import { drawText, drawTextCentred, drawTextRight, textWidth } from './text.js'
 import { clamp } from './camera.js'
-import { drawGameClear, drawGameOver, drawLevelClear, drawPause, drawTitle, drawWorldMap } from './screens.js'
+import { drawGameClear, drawGameOver, drawLevelClear, drawPause, drawScores, drawTitle, drawWorldMap } from './screens.js'
 import { chapterOf } from '../content/chapters.js'
 import { tilesetOf, type Tileset } from '../content/tilesets/index.js'
 import { PICKUP_SPRITES } from '../content/sprites/pickups.js'
@@ -92,12 +93,19 @@ export class Renderer {
     this.canvas.style.imageRendering = 'pixelated'
   }
 
+  /** The high-score table, handed in by the host — the renderer reads no storage. */
+  scores: readonly HighScore[] = []
+
   draw(s: Session, cam: Camera, anim: Anim, pearls = 0): void {
     const { ctx } = this
     ctx.imageSmoothingEnabled = false
 
     if (s.screen === 'title') {
       drawTitle(ctx, s)
+      return
+    }
+    if (s.screen === 'scores') {
+      drawScores(ctx, this.scores, s.uiFrames)
       return
     }
     if (s.screen === 'worldMap') {

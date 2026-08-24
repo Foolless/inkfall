@@ -252,6 +252,7 @@ startLoop({
     // sees is a stutter everybody hears.
     audio.update()
     updateCamera(camera, session.world.player, session.world.map, bossCameraLock(session.world))
+    renderer.scores = save.records.highScores
     renderer.draw(session, camera, anim, totalPearls(save))
     debug.draw(renderer.ctx, session.world, camera)
   },
