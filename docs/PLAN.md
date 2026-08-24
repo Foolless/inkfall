@@ -5,9 +5,11 @@
 Companion to [PRD.md](PRD.md), which says *what* the game is. This says how it gets built,
 in what order, and how we know each piece actually works.
 
-**Status:** Phase 1 complete and deployed — Gate 1 run once, one finding fixed, awaiting a re-test
+**Status:** ✅ Gate 1 **passed** on re-test — the up-dash fix landed and the grey box is fun
 ✅ Phase 2 built — awaiting Gate 2
-✅ Phase 3 built — all five worlds, four new bosses, five upgrades; awaiting Gate 3
+✅ Phase 3 built — all five worlds, four new bosses, five upgrades
+🚦 Gate 3 **failed on round one**: the game was not finishable. Assist Mode is built in
+response (PRD §13, pulled forward from 4.7); re-running the gate is the next step
 **Last updated:** 2026-08-24
 
 ---
@@ -41,9 +43,9 @@ smoke test and human eyes. Chasing coverage through draw calls is wasted effort.
 
 | Phase | What it produces | Exit gate | Rough effort |
 |---|---|---|---|
-| **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — *round 1 done, one fix applied, re-testing* | 8–12 days |
+| **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — ✅ *passed on re-test* | 8–12 days |
 | **2 · One Real Level** ✅ | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min — *pending* | 12–18 days |
-| **3 · All Five Levels** ✅ | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier — *pending* | 20–30 days |
+| **3 · All Five Levels** ✅ | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier — *round 1 failed, Assist Mode built, re-testing* | 20–30 days |
 | **4 · Meta & Ship** | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB | 15–22 days |
 
 **Total: roughly 55–80 focused days**, solo. That is *focused* days, not calendar days —
@@ -60,9 +62,11 @@ checkpoint rather than an afterthought.
 
 > **Goal:** prove the ink dash is fun before a single sprite or enemy exists.
 
-**Built.** All nine checkpoints are green on `main`: 164 unit tests, 4 browser
+**Built, and gated.** All nine checkpoints are green on `main`: 164 unit tests, 4 browser
 smoke tests, 98% statement coverage of the simulation core, 11 kB gzipped.
-Gate 1 is the remaining step, and it needs three humans.
+**Gate 1 passed on its re-test** — the three changes below fixed the round-one
+finding, and the ink dash is fun with nothing around it. That was the one gate
+that could have stopped the project.
 
 ### What the tests changed
 
@@ -185,6 +189,11 @@ safe. If two rounds of tuning don't pass it, the ink dash is the wrong core mech
 PRD's rejected alternatives (tentacle grapple, suction cling) are on the table. Failing here
 costs ten days. Failing at Phase 4 costs eighty.
 
+**✅ Passed, round two.** Round one's finding was discoverability, not capability;
+the three changes above fixed it and the re-test cleared the gate. The ink dash
+is the right core mechanic, and the rejected alternatives stay rejected. This
+was the only gate with the power to stop the project, and it is behind us.
+
 **Deliverable:** a deployed grey box, and an honest answer to whether this game is worth building.
 
 ---
@@ -242,16 +251,25 @@ Two deviations from the PRD, both recorded in its decisions log:
 | **2.4** | **Hazards.** Urchins, collapsing sand, crush clams. | Instant-death-at-any-tier test |
 | **2.5** | **HUD and game state.** Lives, ink pips carrying tier state, shells, pause, death and respawn, checkpoints, continues, game over. | State machine tests; "respawn restores Full, never Charged or Spent" |
 | **2.6** | **Save system.** Versioned `localStorage`, string-keyed, migration path, corrupt-blob fallback to `.bak`. | Schema tests at 100%, including a deliberately corrupted blob |
-| **2.7** | **Audio spike.** The APU (2 pulse, triangle, noise), the dash SFX, one world theme. Gesture-gated start. | **Judgement call:** if the synth sounds bad here, fall back to fewer, simpler tracks now — not in Phase 4 |
+| **2.7** ✅ | **Audio spike.** The APU (2 pulse, triangle, noise), the dash SFX, one world theme. Gesture-gated start. | **Judgement call — answered: fall back.** Eleven tracks is cut to five; see below |
 | **2.8** | **World 1, all sections.** A1 through C3, per the PRD beat sheet. Ink Bulb taught in A4. | **Reachability test**: provably completable at the Spent tier |
 | **2.9** | **The Hermit King.** Three phases, fixed-camera arena, boss door and level exit. | Boss phase-transition tests |
 | **2.10** | **Title screen and level clear.** Enough shell to start, play, finish and restart without touching the console. | Browser smoke test drives the full loop |
 
-Every checkpoint above is ✅ except one judgement call: **2.7 asks whether the synth sounds
-acceptable, and that decision has not been made.** The APU, the tracker and World 1's theme
-are built and everything checkable is checked — pitch, tempo, note length, harmonic
-structure, a real AudioContext starting on a real keypress. Whether it *sounds good* needs
-ears, and it must be answered before Phase 4 commits to eleven tracks.
+Every checkpoint above is ✅, including 2.7's judgement call — **answered in Phase 3, and the
+answer was to fall back.**
+
+The checkpoint exists to force exactly this decision at the cheapest moment, and it names its
+own escape hatch: *"if the synth sounds bad here, fall back to fewer, simpler tracks now — not
+in Phase 4."* Someone listened and took it. The APU, the tracker and the five world themes are
+built and everything checkable is checked — pitch, tempo, note length, harmonic structure, a
+real `AudioContext` starting on a real keypress — but the eleven-track plan is off the table.
+
+**What this changes.** Phase 4's checkpoint 4.5 drops from 11 tracks to the **five that
+already exist**, one per chapter, plus whatever a title and a clear screen need. §10.2's
+track list is cut to match. That is the whole cost of the decision, and taking it now is what
+the checkpoint was for: eleven tracks would have been ~6 days of authoring against a synth
+nobody wanted more of.
 
 ### 🚦 Gate 2
 
@@ -353,6 +371,44 @@ difficulty curve has the saw-tooth shape from the PRD — each world opening eas
 previous boss and closing harder. Instrument deaths per section during this run; that data
 drives Phase 4's tuning.
 
+### Gate 3, round one — failed
+
+**Verdict: "I haven't been able to beat it yet."**
+
+The most useful failure available, and the one the solver structurally cannot
+catch. Reachability proves a level is *possible* on two pips; it says nothing
+about whether a person can actually do it three lives at a time. Those are
+different questions, and only the second one is the gate.
+
+The fix is **Assist Mode**, which PRD §13 already specified and scheduled for
+checkpoint 4.7. It is pulled forward, because the two things Phase 4 is for —
+tuning against real playthrough data, and Gate 4's "60% of testers reach World
+3" — both need a game that can be finished first. Building it now costs nothing
+that building it later would not: it is three numbers and a switch.
+
+- **Lives never run out.** Stronger than §13's "infinite continues", because a
+  continue still costs the run its shells and routes the player through the
+  title on the way back. What stops a beginner is not the third death, it is
+  being sent to the start of the world for it.
+- **Enemies and bosses hold still on one frame in four** — a flat 25% slower,
+  as a skipped step rather than scaled speeds, so every species is slowed
+  through its own clock and none of them has to know the mode exists.
+- **A soft checkpoint every 32 tiles of new ground**, which roughly halves
+  §7.1's ~70-tile conch spacing — §13's "checkpoint density doubled" without
+  editing five levels.
+
+Nothing else changes: hazards still kill at every tier, the ink budget is still
+three pips, and the death is still counted so the no-death bonus stays honest.
+§13 says an assist run is stamped rather than blocked, so the clear screen says
+`ASSIST` and the run stands.
+
+**What this does not settle.** Assist Mode makes the game finishable; it does
+not make the classic difficulty correct. Round two should be run **both ways** —
+the assisted run to confirm the game can be completed at all and to get the
+deaths-per-section data Phase 4 needs, and a classic run to find where the curve
+is actually wrong. A mode nobody can turn off is a tuning problem wearing an
+accessibility feature's clothes.
+
 **Deliverable:** the complete five-level game, online, content-locked.
 
 ---
@@ -370,9 +426,9 @@ drives Phase 4's tuning.
 | **4.2** | **Scoring.** Shells, stomp chains, Charged-dash kills, clear bonuses, no-damage and no-death bonuses. Local high-score table. | Score arithmetic at 100% coverage |
 | **4.3** | **Speedrun timers.** Frame-accurate per-level and full-run, PBs per character, splits, optional ghost. | Timer rule tests: boss fights counted, menus excluded, deaths don't stop the clock |
 | **4.4** | **World map.** Data-driven, scrollable, showing pearls, best times, lock state. | Renders correctly from an arbitrary node list, not five hard-coded ones |
-| **4.5** | **Full audio.** 11 tracks, ~26 SFX, independent volumes, one-key mute. | Manual; every cue also has a visual counterpart |
+| **4.5** | **Full audio.** ~~11 tracks~~ **the five chapter themes** (2.7's fallback, taken), ~26 SFX, independent volumes, one-key mute. | Manual; every cue also has a visual counterpart |
 | **4.6** | **Juice.** Hitstop, screen shake, ink trails, silt, shrink burst, the count-up score tally. | Manual — this is 60% of the game's feel and none of it is testable |
-| **4.7** | **Options and accessibility.** Key remapping, screen-shake and flash sliders, light-radius slider, Assist Mode. | A11y checklist; every hazard legible in greyscale |
+| **4.7** | **Options and accessibility.** Key remapping, screen-shake and flash sliders, light-radius slider, ~~Assist Mode~~ *(built in Phase 3 — Gate 3 needed it to run at all)*. | A11y checklist; every hazard legible in greyscale |
 | **4.8** | **Performance and size.** ≤ 8 ms frame time, zero allocations in the update loop, ≤ 1.5 MB gzipped. | CI bundle assertion; a 5-minute session with no dropped frames |
 | **4.9** | **Playtest and tune.** Three external playtests. Apply the tightening ladder if it reads soft. | ≥ 60% of testers who start W1 reach W3 |
 

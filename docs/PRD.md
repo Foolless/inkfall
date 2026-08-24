@@ -4,7 +4,7 @@
 **Genre:** 2D side-scrolling action platformer
 **Player character:** Nib, a squid
 **Scope:** 5 levels, one boss each
-**Status:** Draft v1.5 — Phase 3 built. All five worlds are authored and the game is completable start to finish; §16's one-tile-gap question is resolved (dropped for v1) and the reachability solver has had opinions about four of the level designs
+**Status:** Draft v1.6 — Phase 3 built and Gate 3 run once. All five worlds are authored and the game is completable start to finish, but a person could not finish it, so **Assist Mode is built** (§13.1, pulled forward from 4.7). Checkpoint 2.7's judgement call is answered: the soundtrack falls back to **five tracks** (§10.2). §16's one-tile-gap question stays resolved
 **Scope:** v1 ships **5 levels**. The architecture must not foreclose ~50 (§12.7).
 **Owner:** richard.andrew.young@gmail.com
 **Last updated:** 2026-08-24
@@ -708,19 +708,29 @@ This keeps the bundle tiny, avoids licensing entirely, and produces a sound that
 
 ### 10.2 Music
 
+**v1.5: cut from eleven tracks to five.** Checkpoint 2.7 exists to force this judgement at the
+cheapest possible moment — *"if the synth sounds bad here, fall back to fewer, simpler tracks
+now, not in Phase 4"* — and in Phase 3 it was called and the fallback taken. The five chapter
+themes ship; the six below them are struck. §12.7 already makes music a property of a
+*chapter* rather than a level, so this is a shorter list and not a different design.
+
 | Track | Length | Character |
 |---|---|---|
-| Title | 40 s loop | Slow, curious, single melody over a triangle bass |
 | World 1 | 60 s loop | Bright, bouncy, major key — the only genuinely happy track |
 | World 2 | 70 s loop | Modal, drifting, syncopated bass |
 | World 3 | 70 s loop | Waltz in 3/4, minor, a broken music-box motif |
 | World 4 | 60 s loop | Fast, driving, heavy noise-channel percussion |
 | World 5 | 90 s loop | Sparse, arrhythmic, mostly triangle and silence |
-| Boss | 50 s loop | Shared across W1–4, transposed up a step each world |
-| Kraken | 100 s loop | 3 sections that hard-switch on phase change |
-| Level clear | 6 s | |
-| Game over | 5 s | |
-| True ending | 45 s | World 1's melody, slowed, in a minor key |
+| ~~Title~~ | | Struck — the title screen holds World 1's theme |
+| ~~Boss~~ | | Struck — a boss keeps its chapter's theme |
+| ~~Kraken~~ | | Struck — World 5's theme carries the last fight |
+| ~~Level clear~~ · ~~Game over~~ | | Struck — both are SFX stings, not tracks |
+| ~~True ending~~ | | Struck |
+
+**Design note — the descent has to stay audible.** Whatever the list is, each theme is voiced
+lower than the one above it, and `tests/audio.test.ts` asserts that across all five. It caught
+World 3's bass sitting under World 4's in Phase 3, which is the one property five tracks can
+lose that eleven could hide.
 
 ### 10.3 SFX
 
@@ -975,8 +985,33 @@ The game is deliberately hard. Difficulty is a design choice; *inaccessibility* 
 | Vision — contrast | World 5's darkness has a `Light Radius` slider (5 / 7 / 10 tiles). Using it disables leaderboard submission but nothing else. |
 | Photosensitivity | `Reduce Flashing` option: caps flash frequency at 3 Hz, removes the death-screen ink flash, disables boss-hit strobe. |
 | Vestibular | `Screen Shake` slider, 0–100%, and a `Camera Lookahead` toggle. |
-| Cognitive / pacing | **Assist Mode** — infinite continues, checkpoint density doubled, and a 25% enemy speed reduction. Off by default, plainly labelled, and it **stamps runs as `ASSIST` on the local leaderboard rather than blocking them.** This preserves the Classic NES default for everyone who wants it while making the game finishable by someone who can't clear a 3-life gauntlet. |
+| Cognitive / pacing | **Assist Mode** — **built in Phase 3**, see below. Off by default, plainly labelled, and it **stamps runs as `ASSIST` rather than blocking them.** This preserves the Classic NES default for everyone who wants it while making the game finishable by someone who can't clear a 3-life gauntlet. |
 | Audio | Every audio cue has a visual counterpart. The pearl chime pairs with a faint screen-edge shimmer; the pressure heartbeat pairs with a vignette. |
+
+### 13.1 Assist Mode, as built
+
+Scheduled for checkpoint 4.7 and **pulled forward into Phase 3**, because Gate 3 round one
+failed on the most fundamental finding available: the game was not finishable. Phase 4's whole
+job is tuning against playthrough data and its gate asks that 60% of testers reach World 3 —
+neither is possible without a game somebody can complete.
+
+Three provisions, and each is a number rather than a special case somewhere:
+
+| Provision | As built | Why this and not the obvious alternative |
+|---|---|---|
+| **Lives never run out** | The counter does not go down, and there is no game over. The HUD reads `NIBx∞`. | Stronger than "infinite continues", which was this document's original wording. A continue still costs the run its shells and routes the player through the title on the way back. What stops a beginner is not the third death; it is being sent to the start of the world for it. |
+| **Enemies at three-quarter speed** | Every enemy *and every boss* holds still on one frame in four. | A skipped step, not scaled speeds. Every species is a pure function of its own clock (§12.6), so holding the clock slows the patrol, the sine, the fire cycle and the lunge by the same 25% at once — and no species has to know the mode exists. Scaling thirteen sets of constants would have been thirteen chances to get it wrong. |
+| **A soft checkpoint every 32 tiles** | Set at Nib's feet on real footing, forward progress only, never inside a boss arena. | §7.1 spaces conches ~70 tiles apart, so this roughly halves the walk back — "checkpoint density doubled" without re-authoring five levels. The three guards are each a respawn loop that would otherwise be possible. |
+
+**What it deliberately does not touch.** Hazards still kill at every tier. The ink budget is
+still three pips and the tier system is untouched. The level still has to be finished. The
+death is still *counted*, so the no-death bonus stays honest — the counter is what the run
+costs, and the death is what happened.
+
+**It is a title-screen switch on one key, and it persists** to `settings.assistMode`. It
+cannot be changed mid-level: a run is played at one difficulty, or the input log means two
+different things at two different points in it and the tally is describing a game nobody
+played.
 
 ---
 
@@ -1172,4 +1207,8 @@ export const DISPLAY = {
 | Cling's teaching room is a four-tile chimney | Facing walls, alternating grips | §7.4's "a single wall with no threat" | Found in Phase 3: one wall teaches the grip but not the push-off, and the push-off is the half that makes Cling a movement upgrade. |
 | W4's pearl ② sits behind a bombed wall | Cracked crust over an alcove | Inside a Magma Snail's shell, per the beat sheet | Found in Phase 3: a pearl inside a stunned enemy has no stable position to fall to and made the pickup depend on where the shell stopped sliding. |
 | W5's pearl ② sits behind cracked crust | A bomb gate | A crack only a Small Nib fits through | Found in Phase 3: a size gate rewards being hurt, and the tier is meant to be a resource the player protects. |
+| Assist Mode gives **unlimited lives**, not infinite continues | The counter never goes down and there is no game over | §13's original "infinite continues"; more starting lives | Found at Gate 3: what stops a beginner is not the third death, it is being sent back to the start of the world for it. A continue also resets the shells, which quietly makes the assisted run a worse one. |
+| Assist Mode's slowdown is a **skipped step** | Enemies and bosses hold still one frame in four | Scaling each species' speed constants by 0.75 | Found in Phase 3: every species is a pure function of its own clock, so holding the clock slows the patrol, the sine, the fire cycle and the lunge together. Scaling thirteen sets of constants is thirteen chances to miss one, and the clock-driven enemies would have desynchronised rather than slowed. |
+| Assist Mode is built in Phase 3, not 4.7 | Pulled forward | Keeping it in the accessibility checkpoint | Found at Gate 3: the game was not finishable, and Phase 4 cannot tune against playthrough data from a playthrough that does not happen. |
+| The soundtrack is **five tracks, not eleven** | The five chapter themes | §10.2's title, boss, Kraken, clear, game-over and true-ending tracks | Checkpoint 2.7's judgement call, answered in Phase 3 and answered as "fall back" — which is the option the checkpoint names and the moment it names for taking it. Eleven tracks is ~6 days of authoring against a synth nobody wanted more of. |
 | Completability is tested with a **derived** loadout | `loadoutOnArrival(id)` from campaign order + `GRANTED_ON_CLEAR` | Authoring the expected loadout per level | Found in Phase 3: an authored loadout is a second copy of the campaign order, and the copy is what goes stale. Deriving it means adding an upgrade to a chapter re-checks every later level for free. |
