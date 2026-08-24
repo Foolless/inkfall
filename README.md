@@ -2,10 +2,12 @@
 
 A NES-difficulty 2D platformer about a squid descending from a sunlit tide pool to the abyss.
 
-**Status:** Phase 3 built — all five worlds, five bosses, five upgrades, start to finish on
-one save. Gate 1 ✅ passed. Gate 3 round one failed on the most useful finding available —
-the game was not finishable — so **Assist Mode** is built (unlimited lives, slower enemies,
-denser checkpoints). Press **A** on the title. Gates 2 and 3 still need people.
+**Status:** Feature-complete. All four phases are built — five worlds, five bosses, five
+upgrades, fifteen pearls, a world map, speedrun timers with ghosts, the full sound roster,
+and an options screen with real accessibility settings. Gate 1 ✅ passed. Gate 3's first
+round failed on the most useful finding available — the game was not finishable — so
+**Assist Mode** exists (press **A** on the title): unlimited lives, slower enemies, denser
+checkpoints. Gates 2, 3 and 4 remain, and all three need people.
 
 📄 **[docs/PRD.md](docs/PRD.md)** — what the game is
 🛠️ **[docs/PLAN.md](docs/PLAN.md)** — how it gets built: four phases, checkpoints, testing, hosting
@@ -49,8 +51,8 @@ how v1 is built.
 ```bash
 npm install
 npm run dev       # World 1, at http://localhost:5173
-npm run verify    # typecheck + lint + 923 unit tests + build + bundle size
-npm run smoke     # 12 Playwright browser tests
+npm run verify    # typecheck + lint + 1,107 unit tests + build + bundle size
+npm run smoke     # 14 Playwright browser tests
 ```
 
 `npm run dev` also serves the sprite editor at `/tools/sprite-editor/` and the level editor
@@ -64,10 +66,16 @@ an ink bolt once World 1 is cleared, and **↓+C** throws an ink bomb once World
 for ranged ink, because the game deliberately fits on one hand. **Esc** pauses, **M** mutes,
 **R** restarts, **F1** opens the debug overlay (hitboxes, velocity, frame-time graph).
 
-**A** on the title screen toggles **Assist Mode** (PRD §13.1): lives never run out, enemies
-and bosses move at three-quarter speed, and a soft checkpoint lands every 32 tiles of new
-ground. Nothing else changes — hazards still kill, the ink budget is still three pips, and
-the run is stamped `ASSIST` rather than blocked. It persists to the save.
+On the title: **↑** opens Options, **↓** shows the high scores, **Space** goes to the world
+map. On the map, **↑/↓** pick a level — any cleared level can be replayed freely, which is
+what makes five of the fifteen pearls reachable at all. Paused, **↓** quits back to the map.
+
+**Options** (PRD §13) carries the accessibility settings first: Assist Mode, Reduce Flashing,
+Screen Shake, and World 5's light radius, followed by volumes, the speedrun timer, the PB
+ghost, and full key remapping for all eight actions. **A** on the title is still the one-key
+shortcut for Assist Mode — lives never run out, enemies and bosses move at three-quarter
+speed, and a soft checkpoint lands every 32 tiles. Nothing else changes: hazards still kill,
+the budget is still three pips, and the run is stamped `ASSIST` rather than blocked.
 
 ## Building it
 
@@ -83,9 +91,30 @@ at a public URL and a gate that a machine can't pass for you:
 3. **All Five Levels** ✅ — the full descent, completable start to finish. Four more worlds,
    nine more enemies, four more bosses, the five ink upgrades, and a level editor that
    round-trips every shipped level byte for byte.
-4. **Meta & Ship** — pearls, scoring, speedrun timers, audio, polish, accessibility. Two of
-   its checkpoints are already spent: Assist Mode (4.7) because Gate 3 needed it, and the
-   soundtrack (4.5) cut from eleven tracks to five.
+4. **Meta & Ship** ✅ — the world map and free replay, all fifteen pearls with their gates
+   asserted one by one, scoring and a high-score table, frame-accurate timers with splits
+   and PB ghosts, the complete SFX roster, screen shake and particles, and full key
+   remapping alongside §13's accessibility settings.
+
+## What Phase 4 found
+
+Every finding in this phase was the same shape, and a different shape from Phase 3's. Phase
+3's bugs were geometry — a gate that did not gate. Phase 4's were **things written down and
+never read back**: state the game maintained and then ignored, or asked for and never
+received. None of them crashed.
+
+- **Progress was written and never read.** `unlocked` had been maintained since Phase 2 and
+  nothing ever looked at it, so every session started at World 1 however far you had got.
+  The world map's cursor is the fix, and it is the game's continue.
+- **Every point earned inside a level was thrown away at the exit** — after the HUD had
+  spent the level showing them to you.
+- **Seven sound cues fired silently**, including every ranged-ink sound, because one `as`
+  cast told the compiler the world could only raise sounds the synth knew.
+- **Three glyphs were missing**, among them the `↑` in the up-dash hint that Gate 1 asked
+  for and the `>` cursor on both new menus.
+
+Six of the eight were invisible to the existing tests, because those asserted what the code
+*stored* rather than what it *used*. Each fix came with an assertion of the second kind.
 
 ## What Phase 3 found
 

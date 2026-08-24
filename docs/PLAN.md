@@ -9,7 +9,10 @@ in what order, and how we know each piece actually works.
 ✅ Phase 2 built — awaiting Gate 2
 ✅ Phase 3 built — all five worlds, four new bosses, five upgrades
 🚦 Gate 3 **failed on round one**: the game was not finishable. Assist Mode is built in
-response (PRD §13, pulled forward from 4.7); re-running the gate is the next step
+response (PRD §13, pulled forward from 4.7)
+✅ **Phase 4 built** — all nine checkpoints. The game is feature-complete: pearls, scoring,
+speedrun timers and ghosts, the world map, the full SFX roster, juice, options and
+accessibility. Gates 2, 3 and 4 are what remain, and all three need people
 **Last updated:** 2026-08-24
 
 ---
@@ -46,7 +49,7 @@ smoke test and human eyes. Chasing coverage through draw calls is wasted effort.
 | **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — ✅ *passed on re-test* | 8–12 days |
 | **2 · One Real Level** ✅ | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min — *pending* | 12–18 days |
 | **3 · All Five Levels** ✅ | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier — *round 1 failed, Assist Mode built, re-testing* | 20–30 days |
-| **4 · Meta & Ship** | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB | 15–22 days |
+| **4 · Meta & Ship** ✅ | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB — *pending* | 15–22 days |
 
 **Total: roughly 55–80 focused days**, solo. That is *focused* days, not calendar days —
 scale to your actual availability. The estimates assume the PRD is not relitigated mid-build;
@@ -413,23 +416,57 @@ accessibility feature's clothes.
 
 ---
 
-# Phase 4 · Meta & Ship
+# Phase 4 · Meta & Ship ✅
 
 > **Goal:** the systems that make people come back, and the quality that makes it worth
 > sharing.
+
+**Built.** All nine checkpoints are green: 1,107 unit tests across 41 files, 14 browser
+tests, 60.1 kB gzipped against a 1.5 MB budget. Gate 4 is the remaining step, and it needs
+five strangers.
+
+### What Phase 4 surfaced
+
+Every finding in this phase is the same shape, and it is a different shape from Phase 3's.
+Phase 3's bugs were *geometry* — a gate that did not gate, a pearl that could not be had.
+Phase 4's were all **things that were written down and never read back**: state the game
+carefully maintained and then ignored, or asked for and never received. None of them crash.
+
+| Found | Where | Why it mattered |
+|---|---|---|
+| **Progress was written and never read** | `main.ts` | `progress.unlocked` had been maintained since Phase 2 and no code ever looked at it, so every session started at the tide pools however far anyone had got. That is half of why Gate 3's playthrough went badly, and the world map is where it got fixed — the map's cursor *is* the continue. |
+| **Every point earned inside a level was discarded** | `state.ts` | The run banked only the clear tally's bonuses, so every stomp, chain, inked kill and boss hit was thrown away at the exit — after the HUD had spent the level showing the player those points, and in full view of a clear screen counting to a smaller number. |
+| **Seven sound cues fired silently** | `main.ts` | `audio.play(cue as Cue)` asserted that whatever the world raised was a sound the synth knew, and the compiler believed it. Every ranged-ink sound, the upgrade sting and the cling grip had been firing and producing nothing since Phase 3. |
+| **Three glyphs were missing** | `content/font.ts` | `↑` and `↓` in the two key hints — Gate 1's entire fix for nobody finding the up-dash — plus `>`, which is the cursor on both new menus. All drawn as missing-character boxes. The coverage test walked a hand-written list of strings rather than the screens. |
+| **A pearl paid out on every replay** | `world.ts` | 5,000 points and an extra life each time. Theoretical until 4.1 added free replay, at which point any cleared level is a life farm. |
+| **One run wrote five high scores** | `main.ts` | The table is the top ten *runs* and an entry went in per level clear, so a single playthrough filled half the board with snapshots of itself, each beating the last. |
+| **Escape left Options and then opened the world map** | `main.ts` | The options screen reads raw key events, so the driver saw the same press and delivered it to the screen behind. Found by a browser test that kept flaking — which is what a flaky test usually is. |
+| **Three allocations per frame** | `world.ts` | Two step contexts rebuilt every frame, one carrying two fresh closures, plus a box per checkpoint entity per frame. §12.6 had asked for zero since Phase 1. |
+
+**The pattern worth keeping.** Six of those eight were invisible to every existing test
+because the tests asserted what the code *stored*, not what it *used*. The fixes each came
+with an assertion of the second kind: the tally's lines must sum to what the HUD showed, the
+cue list is grepped out of the simulation and checked against the synth, the font test walks
+the option rows and map labels themselves, and the step contexts must be the same objects on
+frame 600 as on frame 1.
+
+**Two things deliberately not built.** Octo, Cuttle and Nautilus are §8.6's post-1.0 work and
+stay there — but the *unlock* for all fifteen pearls is recorded now, because the alternative
+is asking somebody who finished the collection in v1 to do it again in v2. And 2.7's
+soundtrack fallback holds: five chapter themes, not eleven tracks.
 
 ### Checkpoints
 
 | # | Checkpoint | Proven by |
 |---|---|---|
-| **4.1** | **Pearls and backtracking.** All 15 placed, persistent, tracked. Free replay of cleared levels from the world map. | **All 15 collectible** — asserted by the reachability solver given each pearl's stated upgrade and tier |
-| **4.2** | **Scoring.** Shells, stomp chains, Charged-dash kills, clear bonuses, no-damage and no-death bonuses. Local high-score table. | Score arithmetic at 100% coverage |
-| **4.3** | **Speedrun timers.** Frame-accurate per-level and full-run, PBs per character, splits, optional ghost. | Timer rule tests: boss fights counted, menus excluded, deaths don't stop the clock |
-| **4.4** | **World map.** Data-driven, scrollable, showing pearls, best times, lock state. | Renders correctly from an arbitrary node list, not five hard-coded ones |
-| **4.5** | **Full audio.** ~~11 tracks~~ **the five chapter themes** (2.7's fallback, taken), ~26 SFX, independent volumes, one-key mute. | Manual; every cue also has a visual counterpart |
-| **4.6** | **Juice.** Hitstop, screen shake, ink trails, silt, shrink burst, the count-up score tally. | Manual — this is 60% of the game's feel and none of it is testable |
-| **4.7** | **Options and accessibility.** Key remapping, screen-shake and flash sliders, light-radius slider, ~~Assist Mode~~ *(built in Phase 3 — Gate 3 needed it to run at all)*. | A11y checklist; every hazard legible in greyscale |
-| **4.8** | **Performance and size.** ≤ 8 ms frame time, zero allocations in the update loop, ≤ 1.5 MB gzipped. | CI bundle assertion; a 5-minute session with no dropped frames |
+| **4.1** ✅ | **Pearls and backtracking.** All 15 placed, persistent, tracked. Free replay of cleared levels from the world map. | **All 15 collectible** — asserted by the reachability solver given each pearl's stated upgrade and tier |
+| **4.2** ✅ | **Scoring.** Shells, stomp chains, Charged-dash kills, clear bonuses, no-damage and no-death bonuses. Local high-score table. | Score arithmetic at 100% coverage |
+| **4.3** ✅ | **Speedrun timers.** Frame-accurate per-level and full-run, PBs per character, splits, optional ghost. | Timer rule tests: boss fights counted, menus excluded, deaths don't stop the clock |
+| **4.4** ✅ | **World map.** Data-driven, scrollable, showing pearls, best times, lock state. | Renders correctly from an arbitrary node list, not five hard-coded ones |
+| **4.5** ✅ | **Full audio.** ~~11 tracks~~ **the five chapter themes** (2.7's fallback, taken), ~26 SFX, independent volumes, one-key mute. | Manual; every cue also has a visual counterpart |
+| **4.6** ✅ | **Juice.** Hitstop, screen shake, ink trails, silt, shrink burst, the count-up score tally. | Manual — this is 60% of the game's feel and none of it is testable |
+| **4.7** ✅ | **Options and accessibility.** Key remapping, screen-shake and flash sliders, light-radius slider, ~~Assist Mode~~ *(built in Phase 3 — Gate 3 needed it to run at all)*. | A11y checklist; every hazard legible in greyscale |
+| **4.8** ✅ | **Performance and size.** ≤ 8 ms frame time, zero allocations in the update loop, ≤ 1.5 MB gzipped. | CI bundle assertion; a 5-minute session with no dropped frames |
 | **4.9** | **Playtest and tune.** Three external playtests. Apply the tightening ladder if it reads soft. | ≥ 60% of testers who start W1 reach W3 |
 
 ### The tuning ladder
