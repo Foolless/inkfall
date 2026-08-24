@@ -5,7 +5,7 @@ import type { World } from '../game/world.js'
 import type { Camera } from './camera.js'
 import { frameFor, paletteFor, type Anim } from './anim.js'
 import { enemyFrame } from './enemy-anim.js'
-import { clamState, isTelegraphing } from '../game/hazards.js'
+import { bubbleBox, clamState, isTelegraphing, pressureLoad } from '../game/hazards.js'
 import { formatScore, formatTime, type Session } from '../game/state.js'
 import { SHARED } from '../content/palettes.js'
 import { drawText, drawTextCentred, drawTextRight, textWidth } from './text.js'
@@ -14,7 +14,12 @@ import { drawGameOver, drawLevelClear, drawPause, drawTitle } from './screens.js
 import { chapterOf } from '../content/chapters.js'
 import { tilesetOf, type Tileset } from '../content/tilesets/index.js'
 import { PICKUP_SPRITES } from '../content/sprites/pickups.js'
+import { PROJECTILE_SPRITES } from '../content/sprites/projectiles.js'
 import * as art from '../content/sprites/bosses.js'
+import { lure, lureRadius } from '../game/enemies/index.js'
+import { armLash, armsOf } from '../game/bosses/index.js'
+import { HAZARDS } from '../game/constants.js'
+import { ABYSS, KELP, VENTS, WRECK } from '../content/palettes.js'
 import { SHALLOWS } from '../content/palettes.js'
 import { drawSprite, SpriteCache } from './sprite.js'
 
@@ -43,6 +48,24 @@ const COLOURS: Record<TileId, string | null> = {
   [Tile.CURRENT_U]: '#25505c',
   [Tile.CURRENT_D]: '#25505c',
   [Tile.SLICK]: '#4a5f6b',
+  [Tile.CRACKED]: '#4a3f38',
+  [Tile.FUSED]: '#5a3a2a',
+  [Tile.MAGMA]: '#ff6b35',
+  [Tile.HOT]: '#8b2c1f',
+}
+
+/**
+ * Four bosses, four colour sets, each from its own chapter's sub-palette.
+ *
+ * `open` is deliberately the brightest colour any of them has: the damage
+ * window is the only thing on screen a player under pressure has to find.
+ */
+const BOSS_COLOURS: Record<string, { body: string; rim: string; part: string; open: string }> = {
+  kelpWarden: { body: KELP.SILHOUETTE, rim: KELP.KELP_MID, part: KELP.KELP_DARK, open: KELP.GOD_RAY },
+  drownedCaptain: { body: WRECK.COLD_WATER, rim: WRECK.VERDIGRIS, part: WRECK.BRASS, open: WRECK.LANTERN },
+  ventLord: { body: VENTS.BASALT, rim: VENTS.ROCK_RED, part: VENTS.ASH, open: VENTS.SULPHUR },
+  kraken: { body: ABYSS.SHAPE, rim: ABYSS.BIO_DIM, part: ABYSS.SHAPE, open: ABYSS.BIO_MAGENTA },
+  default: { body: SHARED.UI_DIM, rim: SHARED.UI_TEXT, part: SHARED.UI_DIM, open: SHARED.INK_CYAN },
 }
 
 export class Renderer {
@@ -87,11 +110,19 @@ export class Renderer {
 
     if (set) this.drawTileset(w, ox, oy, set)
     else this.drawTiles(w, ox, oy)
+    this.drawRises(w, ox, oy)
     this.drawClams(w, ox, oy)
+    this.drawBubbles(w, ox, oy)
     this.drawPickups(w, ox, oy)
     this.drawEnemies(w, ox, oy)
     this.drawBoss(w, ox, oy)
+    this.drawProjectiles(w, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
+    // The abyss, last of all: everything above is drawn and then most of it is
+    // taken away again. PRD §7.6 — a 5-tile radius, and the lures.
+    const dark = chapterOf(s.level.chapter).dark
+    if (dark !== undefined) this.drawDarkness(w, ox, oy, dark)
+    this.drawPressure(w)
     // Only while playing: a key hint has no business on top of a tally screen.
     if (s.screen === 'playing') this.drawHints(w, ox, oy)
     this.drawHud(s)
@@ -138,6 +169,32 @@ export class Renderer {
         }
 
         if (t === Tile.EMPTY) continue
+
+        // Magma and superheated water are liquids and are painted, not blitted.
+        if (t === Tile.MAGMA || t === Tile.HOT) {
+          const heat = set.heat
+          ctx.fillStyle = heat ? (t === Tile.MAGMA ? heat.magma : heat.hot) : (COLOURS[t] as string)
+          ctx.fillRect(px, py, T, T)
+          if (tileAt(w.map, tx, ty - 1) !== t) {
+            ctx.fillStyle = heat?.crest ?? '#ffd23f'
+            ctx.fillRect(px, py, T, 1)
+            // Something moving on the surface, so a still frame still reads as
+            // "this is liquid and it will kill you" rather than as a floor.
+            ctx.fillRect(px + ((w.frame >> 2) % T), py + 1, 3, 1)
+          }
+          continue
+        }
+
+        if (t === Tile.CRACKED || t === Tile.FUSED) {
+          if (w.collapsed.has(index)) continue
+          const cel = t === Tile.CRACKED ? set.cracked : set.fused
+          if (cel) drawSprite(ctx, this.sprites.get(cel), px, py)
+          else {
+            ctx.fillStyle = COLOURS[t] as string
+            ctx.fillRect(px, py, T, T)
+          }
+          continue
+        }
 
         if (t === Tile.CRUMBLE) {
           if (w.collapsed.has(index)) continue
@@ -227,6 +284,133 @@ export class Renderer {
     }
   }
 
+  /**
+   * A rising surface — the flood, the magma. Drawn as a filled region with a
+   * moving line on it, because a surface with no edge does not read as rising.
+   */
+  private drawRises(w: World, ox: number, oy: number): void {
+    const { ctx } = this
+    for (const r of w.rises) {
+      if (!r.armed) continue
+      const y = Math.floor(r.y - oy)
+      if (y > DISPLAY.HEIGHT) continue
+      ctx.fillStyle = r.fluid === 'magma' ? 'rgba(255,107,53,0.82)' : 'rgba(44,62,80,0.62)'
+      ctx.fillRect(0, y, DISPLAY.WIDTH, DISPLAY.HEIGHT - y)
+      ctx.fillStyle = r.fluid === 'magma' ? '#ffd23f' : '#c9c2a8'
+      ctx.fillRect(0, y, DISPLAY.WIDTH, 1)
+      // A few crests riding the line, so it is obviously liquid and obviously
+      // moving even on a frame where it has climbed less than a pixel.
+      for (let i = 0; i < 8; i++) {
+        const cx = ((i * 47 + (w.frame >> 1)) % (DISPLAY.WIDTH + 40)) - 20
+        ctx.fillRect(cx, y - 1, 6, 1)
+      }
+      void ox
+    }
+  }
+
+  /**
+   * Bubble streams. One frame of contact and an upward carry, then they pop.
+   *
+   * Drawn as rings rather than discs so they read as air rather than as
+   * pickups — the one thing a player must never do with a bubble is try to
+   * collect it.
+   */
+  private drawBubbles(w: World, ox: number, oy: number): void {
+    const { ctx } = this
+    ctx.fillStyle = '#ddf6fb'
+    for (const b of w.bubbles) {
+      for (let i = 0; i < b.count; i++) {
+        const box = bubbleBox(b, i)
+        if (!box) continue
+        const x = Math.floor(box.x - ox)
+        const y = Math.floor(box.y - oy)
+        ctx.fillRect(x + 2, y, 4, 1)
+        ctx.fillRect(x + 2, y + 7, 4, 1)
+        ctx.fillRect(x, y + 2, 1, 4)
+        ctx.fillRect(x + 7, y + 2, 1, 4)
+        ctx.fillRect(x + 1, y + 1, 1, 1)
+        ctx.fillRect(x + 6, y + 1, 1, 1)
+        ctx.fillRect(x + 1, y + 6, 1, 1)
+        ctx.fillRect(x + 6, y + 6, 1, 1)
+      }
+    }
+  }
+
+  /** Bolts, bombs, barbs and embers. A settled ember pulses where it burns. */
+  private drawProjectiles(w: World, ox: number, oy: number): void {
+    const { ctx } = this
+    for (const p of w.projectiles) {
+      if (!p.alive) continue
+      const frame = PROJECTILE_SPRITES[p.kind]
+      if (!frame) continue
+      const flip = p.vx < 0
+      const x = Math.floor(p.x - ox + (p.w - frame.w) / 2)
+      const y = Math.floor(p.y - oy + (p.h - frame.h) / 2)
+      // A bomb about to go off flashes faster the closer it is, which is the
+      // only warning the player gets and the only one they need.
+      if (p.kind === 'bomb' && p.clock > 10 && (w.frame >> 1) % 2 === 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'
+        ctx.fillRect(x - 1, y - 1, frame.w + 2, frame.h + 2)
+      }
+      drawSprite(ctx, this.sprites.get(frame, flip), x, y)
+    }
+  }
+
+  /**
+   * The abyss. A hole punched in a black sheet, plus a hole per lure.
+   *
+   * Composited rather than masked per-sprite: everything is drawn normally and
+   * then covered, which means darkness costs one pass regardless of how much is
+   * on screen and works identically for terrain, enemies and Nib himself.
+   */
+  private drawDarkness(w: World, ox: number, oy: number, radiusTiles: number): void {
+    const { ctx } = this
+    const p = w.player
+    const holes: Array<[number, number, number]> = [
+      [p.x + p.w / 2 - ox, p.y + p.h / 2 - oy, radiusTiles * T],
+    ]
+    for (const e of w.enemies) {
+      const r = e.kind === 'lightless' ? lureRadius(e) : 0
+      if (r <= 0) continue
+      const l = lure(e)
+      holes.push([l.x + l.w / 2 - ox, l.y + l.h / 2 - oy, r])
+    }
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.fillStyle = 'rgba(5,5,8,0.94)'
+    ctx.beginPath()
+    ctx.rect(0, 0, DISPLAY.WIDTH, DISPLAY.HEIGHT)
+    for (const [cx, cy, r] of holes) {
+      ctx.moveTo(cx + r, cy)
+      ctx.arc(cx, cy, r, 0, Math.PI * 2, true)
+    }
+    ctx.fill('evenodd')
+    ctx.restore()
+  }
+
+  /**
+   * The pressure vignette. It closes over the last second before the crush.
+   *
+   * PRD §6.2: the room has to say *move* before it says *dead*. Drawn as a
+   * closing frame rather than a flash, because a flash is the one thing §13's
+   * accessibility rules ask for a slider on.
+   */
+  private drawPressure(w: World): void {
+    const load = pressureLoad(w.pressure, w.player)
+    const warn = 1 - HAZARDS.PRESSURE_WARN / HAZARDS.PRESSURE_FRAMES
+    if (load < warn) return
+
+    const { ctx } = this
+    const k = (load - warn) / (1 - warn)
+    const inset = Math.floor(k * (DISPLAY.HEIGHT / 2 - 12))
+    ctx.fillStyle = `rgba(5,5,8,${0.35 + k * 0.5})`
+    ctx.fillRect(0, 0, DISPLAY.WIDTH, inset)
+    ctx.fillRect(0, DISPLAY.HEIGHT - inset, DISPLAY.WIDTH, inset)
+    ctx.fillRect(0, 0, inset * 2, DISPLAY.HEIGHT)
+    ctx.fillRect(DISPLAY.WIDTH - inset * 2, 0, inset * 2, DISPLAY.HEIGHT)
+  }
+
   /** Pickups bob on a slow cycle, which is most of what makes them read as
    *  "take me" rather than "scenery". */
   private drawPickups(w: World, ox: number, oy: number): void {
@@ -314,6 +498,11 @@ export class Renderer {
     const b = w.boss
     if (!b || b.state === 'dead') return
 
+    if (b.id !== 'hermitKing') {
+      this.drawBossParts(w, ox, oy)
+      return
+    }
+
     const exposed = b.state === 'exposed'
     const frame = exposed ? art.hermitExposed : art.hermitIdle
     const x = Math.floor(b.x - ox + (b.w - frame.w) / 2)
@@ -336,6 +525,59 @@ export class Renderer {
     if (exposed && (w.frame >> 2) % 2 === 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.22)'
       ctx.fillRect(x, y, frame.w, frame.h)
+    }
+  }
+
+  /**
+   * The other four bosses, drawn from their part lists.
+   *
+   * No sprites: these are large shapes made of a body and its parts, and a
+   * 64x48 hand-authored cel per pose would be four hundred frames of art for
+   * four fights. What matters is that the *open* part is unmistakable, which is
+   * what the pulse does, and that damage is visible without a health bar, which
+   * is what the missing parts do — an arm that is gone is gone, and the player
+   * counts what is left.
+   */
+  private drawBossParts(w: World, ox: number, oy: number): void {
+    const { ctx } = this
+    const b = w.boss
+    if (!b) return
+
+    // Dying: flicker, like the King does.
+    if (b.state === 'dying' && (w.frame >> 1) % 2 === 0) return
+
+    const palette = BOSS_COLOURS[b.id] ?? BOSS_COLOURS.default!
+    const shudder = b.state === 'waking' && (w.frame >> 1) % 2 === 0 ? 1 : 0
+
+    ctx.fillStyle = palette.body
+    ctx.fillRect(Math.floor(b.x - ox) + shudder, Math.floor(b.y - oy), b.w, b.h)
+    ctx.fillStyle = palette.rim
+    ctx.fillRect(Math.floor(b.x - ox) + shudder, Math.floor(b.y - oy), b.w, 2)
+
+    for (const p of b.parts) {
+      if (!p.alive) continue
+      // A vent is a hole in the floor and never a thing; drawing it as a block
+      // would tell the player there is something there to stand on.
+      const px = Math.floor(p.x - ox)
+      const py = Math.floor(p.y - oy)
+      ctx.fillStyle = p.kind === 'vent' ? palette.rim : palette.part
+      ctx.fillRect(px, py, p.w, p.kind === 'vent' ? 2 : p.h)
+
+      if (!p.open) continue
+      // The window is the whole fight, so it is impossible to miss.
+      ctx.fillStyle = (w.frame >> 2) % 2 === 0 ? palette.open : 'rgba(255,255,255,0.35)'
+      ctx.fillRect(px - 1, py - 1, p.w + 2, p.h + 2)
+    }
+
+    // The Warden's arms lash; the reach changes every frame, so it is drawn
+    // rather than authored, exactly like the King's cracks.
+    if (b.id === 'kelpWarden') {
+      ctx.fillStyle = palette.part
+      for (const arm of armsOf(b)) {
+        const lash = armLash(b, arm)
+        if (!lash) continue
+        ctx.fillRect(Math.floor(lash.x - ox), Math.floor(lash.y - oy), Math.ceil(lash.w), lash.h)
+      }
     }
   }
 

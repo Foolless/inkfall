@@ -45,6 +45,13 @@ export function hashWorld(w: World): string {
     p.aimY,
     p.aimYFrames,
     p.deaths,
+    p.upgrades,
+    p.clingDir,
+    p.clingFrames,
+    p.clingsUsed,
+    p.scald,
+    p.shootCooldown,
+    p.stillFrames,
     w.checkpoint?.x ?? -1,
     w.checkpoint?.y ?? -1,
     w.score,
@@ -57,11 +64,29 @@ export function hashWorld(w: World): string {
   // Enemies are simulation state: a Drifter one pixel off its sine is a
   // divergence, and this is the test that has to notice.
   for (const e of w.enemies) {
-    nums.push(e.alive ? 1 : 0, e.x, e.y, e.vx, e.vy, e.facing, e.clock, e.stun, e.inflated, e.w, e.h)
+    nums.push(
+      e.alive ? 1 : 0, e.x, e.y, e.vx, e.vy, e.facing, e.clock, e.stun, e.inflated, e.w, e.h,
+      e.state, e.timer, e.spawned,
+    )
   }
   for (const c of w.clams) nums.push(c.clock)
+  // A bubble's position is a function of its clock, so only the clock and which
+  // ones have been used this pass are state worth hashing.
+  for (const b of w.bubbles) nums.push(b.clock, ...b.popped)
+  for (const r of w.rises) nums.push(r.y, r.armed ? 1 : 0)
+  for (const proj of w.projectiles) {
+    nums.push(proj.alive ? 1 : 0, proj.x, proj.y, proj.vx, proj.vy, proj.clock, proj.settled ? 1 : 0)
+  }
   for (const r of w.rocks) nums.push(r.alive ? 1 : 0, r.x, r.y, r.vx, r.vy)
-  if (w.boss) nums.push(w.boss.x, w.boss.y, w.boss.hits, w.boss.timer, w.boss.beat, w.boss.facing, w.boss.state.length)
+  if (w.boss) {
+    const b = w.boss
+    nums.push(b.x, b.y, b.hits, b.timer, b.beat, b.facing, b.state.length, b.floorRise, b.arenaForceX, b.arenaForceY)
+    // Parts are simulation state as much as the boss is: a tentacle one pixel
+    // off its sweep is a divergence, and this is the test that has to notice.
+    for (const part of b.parts) {
+      nums.push(part.alive ? 1 : 0, part.open ? 1 : 0, part.x, part.y, part.state, part.timer)
+    }
+  }
   nums.push(w.bossActive ? 1 : 0)
   for (const h of w.hints) nums.push(h.frames, h.spent ? 1 : 0)
   // Sets and Maps iterate in insertion order, which can differ between two runs

@@ -29,7 +29,11 @@ export interface Placed {
   y: number
 }
 
+/** Which way a fixed thing points. Turrets, eels and hooks all use it. */
+export type Facing = 'left' | 'right' | 'up' | 'down'
+
 export type EntityDef =
+  // ── World 1 ────────────────────────────────────────────────────────────────
   /** Crab. Walks a platform, turns at ledges and walls. Patrol clamps it. */
   | (Placed & { type: 'snapper'; patrol?: readonly [number, number] })
   /** Jellyfish. Sine float, ignores terrain, damaging on every side. */
@@ -38,11 +42,63 @@ export type EntityDef =
   | (Placed & { type: 'puffer' })
   /** Crush clam. Open 90 frames, slams in 6. Its closed shell is a platform. */
   | (Placed & { type: 'clam'; phase?: number })
+
+  // ── World 2 ────────────────────────────────────────────────────────────────
+  /** Armoured barnacle. Fires along one axis every 100 frames. */
+  | (Placed & { type: 'barbTurret'; dir?: Facing; phase?: number })
+  /** Anchored stalk. Lashes a 4-tile arc; only the base can be killed. */
+  | (Placed & { type: 'whipkelp'; dir?: Facing; phase?: number })
+  /** Sits in a wall socket and lunges when Nib crosses its line. */
+  | (Placed & { type: 'eel'; dir?: Facing; reach?: number })
+
+  // ── World 3 ────────────────────────────────────────────────────────────────
+  /** Drifts at Nib through solid walls. Cannot be killed or stunned. */
+  | (Placed & { type: 'ghostDiver' })
+  /**
+   * Descends, sweeps, retracts. Death on contact; the flat top is a platform.
+   * `drop` is how far it comes down, `span` how far it sweeps — both in tiles.
+   */
+  | (Placed & { type: 'hookline'; dir?: Facing; span?: number; drop?: number; phase?: number })
+
+  // ── World 4 ────────────────────────────────────────────────────────────────
+  /** Armoured front and top. Only the exposed rear takes ink. */
+  | (Placed & { type: 'magmaSnail'; patrol?: readonly [number, number] })
+  /** Flies a patrol and drops a burning ember every 90 frames. */
+  | (Placed & { type: 'cinderMoth'; patrol?: readonly [number, number]; phase?: number })
+
+  // ── World 5 ────────────────────────────────────────────────────────────────
+  /** Weak, fast, and never alone. */
+  | (Placed & { type: 'boneShrimp'; patrol?: readonly [number, number] })
+  /** Invisible but for its lure. Charges when Nib enters the light. */
+  | (Placed & { type: 'lightless'; reach?: number })
+  /** Produces shrimp until it is inked shut. Harmless to touch. */
+  | (Placed & { type: 'shrimpVent'; phase?: number })
+
+  // ── Hazards with state ─────────────────────────────────────────────────────
+  /**
+   * Rising bubbles. One frame of contact, an upward carry, then it pops.
+   * `height` is how far up the column reaches, in tiles.
+   */
+  | (Placed & { type: 'bubble'; height?: number; phase?: number })
+  /**
+   * A rising surface: World 3's flood and World 4's magma, one entity.
+   *
+   * `x` is the trigger column — crossing it starts the clock. `y` is where the
+   * surface begins and `top` is the row it stops at. Water lifts you; magma
+   * kills you, and that difference is a field rather than a module.
+   */
+  | (Placed & { type: 'rise'; fluid: 'magma' | 'flood'; top: number; rate?: number })
+  /** A room that kills you for standing still. `w`/`h` are tiles. */
+  | (Placed & { type: 'pressure'; w: number; h: number })
+
+  // ── Collectibles ───────────────────────────────────────────────────────────
   | (Placed & { type: 'shell' })
   /** Three per level. `id` is the slot on the world map, so it is stable. */
   | (Placed & { type: 'pearl'; id: 0 | 1 | 2 })
   | (Placed & { type: 'inkBulb' })
   | (Placed & { type: 'inkCore' })
+  /** The one upgrade found inside a level rather than granted for clearing one. */
+  | (Placed & { type: 'deepJet' })
 
 export type EntityType = EntityDef['type']
 
@@ -51,10 +107,38 @@ export const ENTITY_TYPES: readonly EntityType[] = [
   'drifter',
   'puffer',
   'clam',
+  'barbTurret',
+  'whipkelp',
+  'eel',
+  'ghostDiver',
+  'hookline',
+  'magmaSnail',
+  'cinderMoth',
+  'boneShrimp',
+  'lightless',
+  'shrimpVent',
+  'bubble',
+  'rise',
+  'pressure',
   'shell',
   'pearl',
   'inkBulb',
   'inkCore',
+  'deepJet',
+]
+
+/** Types that float, walk through walls, or are anchored inside terrain. */
+const MAY_BE_BURIED: readonly EntityType[] = [
+  'drifter',
+  'ghostDiver',
+  'hookline',
+  'barbTurret',
+  'shrimpVent',
+  'lightless',
+  'eel',
+  'rise',
+  'pressure',
+  'bubble',
 ]
 
 export interface LevelDef {
@@ -123,6 +207,8 @@ export interface LoadedLevel {
 
 const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
+const FACING_NAMES: readonly string[] = ['left', 'right', 'up', 'down']
+
 /**
  * Parse and validate. Every failure names the level and the coordinate.
  *
@@ -179,8 +265,14 @@ export function loadLevel(def: LevelDef): LoadedLevel {
     if (!Number.isInteger(e.x) || !Number.isInteger(e.y)) fail(`${where}: coordinates must be whole tiles`)
     if (e.x < 0 || e.x >= map.width || e.y < 0 || e.y >= map.height) fail(`${where}: outside the ${map.width}x${map.height} grid`)
 
-    // A Drifter floats through terrain by design; nothing else may start buried.
-    if (e.type !== 'drifter' && isSolid(map, e.x, e.y, { downward: false, prevBottom: 0 })) {
+    // Some things live inside terrain by design — a turret is bolted to a wall,
+    // an eel's socket *is* a hole in one, a hook hangs from the ceiling. For
+    // everything else, being buried means a pickup nobody can see or an enemy
+    // stuck in the floor, and both are authoring slips worth a line number.
+    if (
+      !(MAY_BE_BURIED as readonly string[]).includes(e.type) &&
+      isSolid(map, e.x, e.y, { downward: false, prevBottom: 0 })
+    ) {
       fail(`${where}: buried in a solid tile`)
     }
 
@@ -195,12 +287,43 @@ export function loadLevel(def: LevelDef): LoadedLevel {
         pearlIds.add(e.id)
         break
       case 'snapper':
+      case 'magmaSnail':
+      case 'cinderMoth':
+      case 'boneShrimp':
         if (e.patrol) {
           const [lo, hi] = e.patrol
           if (!Number.isInteger(lo) || !Number.isInteger(hi)) fail(`${where}: patrol bounds must be whole tiles`)
           if (lo > hi) fail(`${where}: patrol [${lo}, ${hi}] runs backwards`)
           if (e.x < lo || e.x > hi) fail(`${where}: starts outside its own patrol [${lo}, ${hi}]`)
         }
+        break
+      case 'barbTurret':
+      case 'whipkelp':
+      case 'eel':
+      case 'hookline':
+        if ('dir' in e && e.dir !== undefined && !FACING_NAMES.includes(e.dir)) {
+          fail(`${where}: dir must be one of ${FACING_NAMES.join(', ')}`)
+        }
+        if ('reach' in e && e.reach !== undefined && !(e.reach > 0)) fail(`${where}: reach must be positive`)
+        if ('span' in e && e.span !== undefined && !(e.span > 0)) fail(`${where}: span must be positive`)
+        if ('drop' in e && e.drop !== undefined && !(e.drop > 0)) fail(`${where}: drop must be positive`)
+        break
+      case 'bubble':
+        if (e.height !== undefined && !(e.height > 0)) fail(`${where}: height must be positive`)
+        break
+      case 'rise':
+        if (e.fluid !== 'magma' && e.fluid !== 'flood') fail(`${where}: fluid must be magma or flood`)
+        if (!Number.isInteger(e.top) || e.top < 0) fail(`${where}: top must be a row in the grid`)
+        // Upward only. A "rising" surface that starts above where it stops is a
+        // transposed pair of numbers, and it would silently never trigger.
+        if (e.top >= e.y) fail(`${where}: top ${e.top} is not above the surface at ${e.y}`)
+        if (e.rate !== undefined && !(e.rate > 0)) fail(`${where}: rate must be positive`)
+        break
+      case 'pressure':
+        if (!Number.isInteger(e.w) || !Number.isInteger(e.h) || e.w <= 0 || e.h <= 0) {
+          fail(`${where}: a pressure room needs a positive whole-tile size`)
+        }
+        if (e.x + e.w > map.width || e.y + e.h > map.height) fail(`${where}: pressure room runs off the grid`)
         break
       case 'drifter':
         if (e.amplitude !== undefined && e.amplitude < 0) fail(`${where}: amplitude cannot be negative`)

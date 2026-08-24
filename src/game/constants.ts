@@ -65,6 +65,53 @@ export const INK = {
   STOMP_REFUND: 1,
 } as const
 
+/**
+ * The five permanent upgrades. PRD §8.5.
+ *
+ * Every one of these is a *traversal* number. None of them touches how many
+ * hits Nib can take — that is the tier system's job, and the two are kept
+ * apart deliberately (see game/upgrades.ts).
+ */
+export const UPGRADES = {
+  /** Ink Shot: a lobbed bolt. Kills Drifter, Whipkelp, Bone Shrimp; stuns Eel. */
+  SHOT_SPEED: 4.0,
+  SHOT_GRAVITY: 0.12,
+  SHOT_COST: 1,
+  SHOT_LIFE: 120,
+  /** Long enough that spraying is not a strategy, short enough to feel like a verb. */
+  SHOT_COOLDOWN: 20,
+  SHOT_STUN: 90,
+
+  /** Cling: grip for 60 frames, then slide. PRD §8.5. */
+  CLING_FRAMES: 60,
+  CLING_SLIDE: 1.2,
+  /**
+   * The first grip of an airtime is free; every later one costs a pip.
+   *
+   * That is what makes a cling shaft a *route* rather than a free elevator: a
+   * three-storey climb on two pips is exactly three grips, and there is no
+   * fourth.
+   */
+  CLING_REGRIP_COST: 1,
+  /** Push-off from a wall jump. Small — the height comes from the jump itself. */
+  CLING_JUMP_X: 2.4,
+
+  /** Ink Bomb: 20-frame fuse, 3-tile radius (PRD §8.5). */
+  BOMB_FUSE: 20,
+  BOMB_RADIUS: 3,
+  BOMB_COST: 1,
+  BOMB_SPEED: 3.0,
+  BOMB_GRAVITY: 0.2,
+
+  /** Heat Shell: he survives standing in magma itself for 90 frames. */
+  MAGMA_GRACE: 90,
+
+  /** Deep Jet: a fourth pip, a shorter cooldown, a faster dash. */
+  DEEP_JET_PIPS: 1,
+  DEEP_JET_COOLDOWN: 6,
+  DEEP_JET_SPEED: 0.6,
+} as const
+
 export const WATER = {
   GRAVITY: 0.14,
   TERMINAL_FALL: 2.2,
@@ -113,10 +160,14 @@ export const RULES = {
 } as const
 
 /**
- * The World 1 roster. PRD §6.1.
+ * The roster. PRD §6.1 — twelve enemies, one lesson each.
  *
  * Speeds are pixels per frame; distances in this block are **tiles**, because
  * that is the unit a level designer thinks in when placing a Puffer.
+ *
+ * Every telegraph in here is long and every strike is fast. That asymmetry is
+ * the honest-difficulty pillar written as numbers: a death the player could not
+ * have seen coming is the one thing the game promises never to do.
  */
 export const ENEMIES = {
   /** Crab. Walks a platform and turns at ledges and walls. */
@@ -137,6 +188,59 @@ export const ENEMIES = {
    * pixels and it reads as a stomp, not as walking into the side of a crab.
    */
   STOMP_BAND: 6,
+
+  // ── World 2 ────────────────────────────────────────────────────────────────
+  /** Barb Turret. Armoured barnacle; fires along one axis on a fixed cycle. */
+  TURRET_CYCLE: 100,
+  TURRET_TELEGRAPH: 20,
+  BARB_SPEED: 2.6,
+  BARB_LIFE: 120,
+  /** Whipkelp. Lashes a 4-tile arc; only the base can be killed. */
+  WHIPKELP_CYCLE: 120,
+  WHIPKELP_LASH: 40,
+  WHIPKELP_REACH: 4,
+  /** Eel. Sits in a socket, lunges when Nib crosses its line. */
+  EEL_TELEGRAPH: 40,
+  EEL_LUNGE_SPEED: 3.2,
+  EEL_REACH: 5,
+  EEL_RETREAT: 90,
+  /** How far off the eel's own row still counts as crossing its line. */
+  EEL_SIGHT_BAND: 1.5,
+
+  // ── World 3 ────────────────────────────────────────────────────────────────
+  /** Ghost Diver. Drifts at Nib through walls. Cannot be killed or stunned. */
+  GHOST_SPEED: 0.5,
+  /** Hookline. Descends, sweeps, retracts. Death on contact, platform on top. */
+  HOOK_DROP: 60,
+  HOOK_SWEEP: 120,
+  HOOK_RETRACT: 60,
+  HOOK_SWEEP_SPEED: 0.9,
+  /** The flat top that can be ridden, measured down from the hook's own top. */
+  HOOK_RIDE_BAND: 4,
+
+  // ── World 4 ────────────────────────────────────────────────────────────────
+  /** Magma Snail. Armoured front and top; only the exposed rear takes ink. */
+  SNAIL_SPEED: 0.3,
+  /** How much of its length, from the tail, is soft. */
+  SNAIL_REAR: 5,
+  /** Cinder Moth. Flies a patrol and drops embers that burn where they land. */
+  MOTH_SPEED: 0.8,
+  MOTH_DROP_CYCLE: 90,
+  EMBER_BURN: 60,
+  EMBER_GRAVITY: 0.3,
+
+  // ── World 5 ────────────────────────────────────────────────────────────────
+  /** Bone Shrimp. Weak, fast, and there are always more of them. */
+  SHRIMP_SPEED: 1.4,
+  /** A vent keeps producing until it is inked shut. */
+  VENT_CYCLE: 150,
+  VENT_MAX_ALIVE: 4,
+  /** Lightless. Invisible but for its lure; charges when you enter the light. */
+  LIGHTLESS_LURE_RADIUS: 3,
+  LIGHTLESS_CHARGE: 4.0,
+  LIGHTLESS_WINDUP: 24,
+  LIGHTLESS_CHARGE_FRAMES: 70,
+  LIGHTLESS_RECOVER: 60,
 } as const
 
 /**
@@ -152,6 +256,43 @@ export const HAZARDS = {
   CLAM_SLAM: 6,
   CLAM_CLOSED: 60,
   CLAM_TELEGRAPH: 20,
+
+  /**
+   * Bubble stream. One frame of contact, an upward carry, then it pops.
+   *
+   * PRD §6.2 gives the carry as -1.2. It is applied as a velocity rather than
+   * an impulse so a bubble ladder is a *rhythm* — you have to keep arriving.
+   */
+  BUBBLE_CARRY: -1.2,
+  BUBBLE_RISE: 0.7,
+  BUBBLE_SPACING: 40,
+  BUBBLE_RESPAWN: 60,
+
+  /**
+   * A rising surface — World 3's flood and World 4's magma, one entity.
+   *
+   * Two hazards in the PRD, one mechanic: a horizontal line that starts when
+   * Nib crosses a trigger and climbs at a fixed rate. Water lifts you and
+   * magma kills you, and that difference is a field rather than a module.
+   */
+  RISE_MAGMA: 0.25,
+  RISE_FLOOD: 0.2,
+
+  /** Superheated water. 90 frames before the scald kills, and it resets in air. */
+  SCALD_FRAMES: 90,
+  /** How fast the scald timer bleeds back down once Nib surfaces. */
+  SCALD_RECOVER: 2,
+
+  /**
+   * Pressure crush. Stand still longer than this in the abyss and it kills.
+   *
+   * PRD §6.2. The vignette closes over the last third of the timer, which is
+   * the telegraph — the room has to say "move" before it says "dead".
+   */
+  PRESSURE_FRAMES: 180,
+  PRESSURE_WARN: 60,
+  /** Pixels of movement per frame that count as moving at all. */
+  PRESSURE_STILL: 0.35,
 } as const
 
 /**
@@ -185,6 +326,81 @@ export const BOSS = {
    * King fights on a horizon rather than on a beach.
    */
   ARENA_CAMERA_DROP: 28,
+} as const
+
+/**
+ * The other four bosses. PRD §6.3: three hits, three phases, one arena each.
+ *
+ * Same contract as the King, and the same prohibition: nothing here rolls dice.
+ * Every window below is generous because each boss has exactly one, and a
+ * player who cannot find it has not been beaten — they have been stonewalled.
+ */
+export const BOSSES = {
+  /** Every boss dies in three. The number is the genre, not a tuning dial. */
+  HITS: 3,
+  WAKE_FRAMES: 90,
+  DEATH_FRAMES: 120,
+
+  /**
+   * The Kelp Warden. A vertical shaft: four arms, then the core.
+   *
+   * Two-step damage per hit — ink an arm's base, then dash the exposed core —
+   * so the fight is about spending pips in the right order rather than about
+   * landing three of the same thing.
+   */
+  WARDEN_ARMS: 4,
+  WARDEN_LASH: [140, 110, 84],
+  WARDEN_ARM_REGROW: 260,
+  /** Frames the core stays open once every arm is down. The whole damage window. */
+  WARDEN_CORE_OPEN: 120,
+  /** Phase 3's downdraft, which a dash has to be spent against. */
+  WARDEN_DOWNDRAFT: 0.2,
+
+  /**
+   * The Drowned Captain. The ghost is scenery; the lantern is the fight.
+   *
+   * The floor tilt is the reason he is hard: every shot is taken while sliding,
+   * and the 200-frame cycle is slow enough to plan around and long enough that
+   * waiting for level ground costs you the window.
+   */
+  CAPTAIN_DRIFT: 0.6,
+  CAPTAIN_TILT_CYCLE: 200,
+  CAPTAIN_TILT_FORCE: 0.13,
+  CAPTAIN_PHASE_SHIFT: [150, 120, 96],
+  /** Phase 3 splits the lantern three ways; exactly one of them is real. */
+  CAPTAIN_DECOYS: 2,
+  CAPTAIN_STAGGER: 90,
+
+  /**
+   * The Vent Lord. Five vents, one worm, and a floor that keeps rising.
+   *
+   * The arena shrinks by a tile per hit, so winning is what makes the fight
+   * harder — the only boss in the game whose difficulty curve is the player's
+   * own progress.
+   */
+  VENT_COUNT: 5,
+  VENT_RUMBLE: 45,
+  VENT_CREST: 30,
+  VENT_SUBMERGE: 40,
+  VENT_IDLE: [70, 55, 40],
+  /** Tiles of magma that rise for each hit landed. */
+  VENT_MAGMA_PER_HIT: 1,
+
+  /**
+   * The Kraken. Three stages, no checkpoint, about three minutes.
+   *
+   * P1 tentacles and their suckers, P2 the beak, P3 everything plus the eye.
+   * The eye is only open at the top of a Hookline ride, which is the last thing
+   * World 3 taught and the reason the fight is placed where it is.
+   */
+  KRAKEN_TENTACLES: [2, 2, 8],
+  KRAKEN_SWEEP: [180, 150, 120],
+  KRAKEN_SUCKERS: 3,
+  KRAKEN_BEAK_TELEGRAPH: 45,
+  KRAKEN_BEAK_LUNGE: 40,
+  KRAKEN_BEAK_RECOVER: 90,
+  KRAKEN_EYE_OPEN: 150,
+  KRAKEN_STAGGER: 100,
 } as const
 
 /** Collision resolves in sub-steps no larger than this, so nothing tunnels. */

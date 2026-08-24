@@ -38,10 +38,21 @@ export interface CameraTarget {
  */
 export function updateCamera(cam: Camera, target: CameraTarget, map: TileMap, lock?: Lock | null): void {
   if (lock) {
-    // A boss arena is exactly one screen wide, so the fight gets a fixed frame
+    // Most boss arenas are exactly one screen, so the fight gets a fixed frame
     // and the lookahead stops fighting the player for the camera.
-    cam.x = clamp(lock.x, 0, Math.max(0, pixelWidth(map) - DISPLAY.WIDTH))
-    cam.y = clamp(lock.y, 0, Math.max(0, pixelHeight(map) - DISPLAY.HEIGHT))
+    //
+    // Two are not: the Kelp Warden's shaft and the Kraken's water are taller
+    // than a screen on purpose. There the lock stops being a pin and becomes a
+    // fence — the camera follows inside it and cannot leave. A fixed frame on
+    // a two-screen shaft would put half the fight off the bottom of the world.
+    const cx = target.x + target.w / 2
+    const cy = target.y + target.h / 2
+    cam.x =
+      lock.w <= DISPLAY.WIDTH ? lock.x : clamp(cx - DISPLAY.WIDTH / 2, lock.x, lock.x + lock.w - DISPLAY.WIDTH)
+    cam.y =
+      lock.h <= DISPLAY.HEIGHT ? lock.y : clamp(cy - DISPLAY.HEIGHT / 2, lock.y, lock.y + lock.h - DISPLAY.HEIGHT)
+    cam.x = clamp(cam.x, 0, Math.max(0, pixelWidth(map) - DISPLAY.WIDTH))
+    cam.y = clamp(cam.y, 0, Math.max(0, pixelHeight(map) - DISPLAY.HEIGHT))
     cam.lookahead = 0
     return
   }

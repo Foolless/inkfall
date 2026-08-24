@@ -12,6 +12,14 @@ export const Tile = {
   CURRENT_U: 8,
   CURRENT_D: 9,
   SLICK: 10,
+  /** Solid until an Ink Bomb or a Charged dash opens it. PRD §8.5. */
+  CRACKED: 11,
+  /** Solid until Heat Shell lets Nib walk through it. PRD §8.5. */
+  FUSED: 12,
+  /** Molten rock. Instant death, and Heat Shell buys only 90 frames of it. */
+  MAGMA: 13,
+  /** Superheated water. Swimmable, on a scald timer. */
+  HOT: 14,
 } as const
 export type TileId = (typeof Tile)[keyof typeof Tile]
 
@@ -28,6 +36,10 @@ export const LEGEND: Record<string, TileId> = {
   u: Tile.CURRENT_U,
   d: Tile.CURRENT_D,
   '=': Tile.SLICK,
+  x: Tile.CRACKED,
+  f: Tile.FUSED,
+  m: Tile.MAGMA,
+  h: Tile.HOT,
 }
 
 /**
@@ -141,5 +153,23 @@ export function isCurrent(t: TileId): boolean {
  * and the honest model.
  */
 export function isFluid(t: TileId): boolean {
-  return t === Tile.WATER || isCurrent(t)
+  return t === Tile.WATER || t === Tile.HOT || isCurrent(t)
+}
+
+/**
+ * Terrain an upgrade opens. PRD §8.5.
+ *
+ * Both are solid until the player holds the right upgrade, and both are
+ * expressed the same way at runtime: the tile joins the world's `collapsed`
+ * set, which is already the answer to "is this tile currently not solid".
+ * Reusing that rather than threading a loadout through the collision sweep is
+ * what keeps `isSolid` a function of the map and nothing else.
+ */
+export function isBreakable(t: TileId): boolean {
+  return t === Tile.CRACKED || t === Tile.FUSED
+}
+
+/** Tiles that burn. Heat Shell is the only thing that survives either. */
+export function isHeat(t: TileId): boolean {
+  return t === Tile.MAGMA || t === Tile.HOT
 }

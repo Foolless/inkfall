@@ -154,6 +154,18 @@ export interface Tileset {
   hazard: SpriteDef
   slick: SpriteDef
   /**
+   * Terrain an upgrade opens. Optional, because a world with no cracked walls
+   * in it has no business authoring a cel for them — the Tide Pools have
+   * neither, and a required field would mean two unused sprites per chapter.
+   */
+  cracked?: SpriteDef
+  fused?: SpriteDef
+  /**
+   * Molten rock and superheated water, painted rather than blitted for the
+   * same reason water is: both are translucent and both move.
+   */
+  heat?: { magma: string; hot: string; crest: string }
+  /**
    * Water is painted rather than blitted: it is translucent, so what is behind
    * it has to show through. A sprite would have to be opaque or carry an alpha
    * channel the format deliberately does not have.

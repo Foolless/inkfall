@@ -25,6 +25,14 @@ export interface Chapter {
   tileset?: string
   /** Track id for the tracker. One theme per chapter, not per level. */
   music: string
+  /**
+   * Light radius in tiles, or undefined for a lit world.
+   *
+   * A chapter property rather than a level one, like the tileset and the
+   * music, because darkness *is* the look of a world (PRD §12.7). The Abyss is
+   * the only chapter that has it, and the value is §7.6's five tiles.
+   */
+  dark?: number
 }
 
 export const CHAPTERS: Record<string, Chapter> = {
@@ -58,6 +66,7 @@ export const CHAPTERS: Record<string, Chapter> = {
     name: 'The Abyss',
     palette: Object.values(ABYSS),
     music: 'world5',
+    dark: 5,
   },
   /** Not a world — the Phase 1 proving ground and the test fixtures. */
   test: {

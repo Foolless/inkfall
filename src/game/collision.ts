@@ -36,7 +36,12 @@ export { overlapsSolidTile }
 export function isSolid(map: TileMap, tx: number, ty: number, q: SolidQuery): boolean {
   const t: TileId = tileAt(map, tx, ty)
   if (t === Tile.SOLID || t === Tile.SLICK) return true
-  if (t === Tile.CRUMBLE) return !q.collapsed?.has(ty * map.width + tx)
+  // Crumble, cracked and fused are all "solid until something removes them",
+  // and `collapsed` is the one place that records which ones have gone. A
+  // bombed wall and a fallen sand tile are the same fact to the sweep.
+  if (t === Tile.CRUMBLE || t === Tile.CRACKED || t === Tile.FUSED) {
+    return !q.collapsed?.has(ty * map.width + tx)
+  }
   if (t === Tile.ONEWAY) {
     // Passable from every direction except landing on top of it.
     return q.downward && q.prevBottom <= ty * T + EPS

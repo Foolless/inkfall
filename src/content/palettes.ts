@@ -44,12 +44,23 @@ export const SHALLOWS = {
   URCHIN_TIP: '#e0705c',
 } as const
 
-/** World 2 — Kelp Forest. Filtered, close. */
+/**
+ * World 2 — Kelp Forest. Filtered, close.
+ *
+ * Each world below gained a mid-tone and a foreign accent in Phase 3. Four
+ * colours is enough to name a world and not enough to draw one: every sprite
+ * gets three plus transparent, and with only a dark, a light and a highlight
+ * available, a barnacle and a stalk had to be the same three colours. The
+ * mid-tone is what lets two things in the same room read as two things.
+ */
 export const KELP = {
   KELP_DARK: '#1e4d3a',
+  KELP_MID: '#3d7a52',
   FROND: '#7fb069',
   SILHOUETTE: '#0d2a1f',
   GOD_RAY: '#c8e6a0',
+  /** The one thing in the forest that is not a plant. */
+  BARNACLE: '#8a7f5c',
 } as const
 
 /** World 3 — Sunken Ship. Cold, decayed, one warm point. */
@@ -58,6 +69,8 @@ export const WRECK = {
   VERDIGRIS: '#4a8f7b',
   COLD_WATER: '#2c3e50',
   LANTERN: '#ffb347',
+  BRASS: '#8a7a4a',
+  BONE: '#c9c2a8',
 } as const
 
 /** World 4 — Volcanic Vents. Violent, high-contrast. */
@@ -66,6 +79,8 @@ export const VENTS = {
   MAGMA: '#ff6b35',
   SULPHUR: '#ffd23f',
   ROCK_RED: '#8b2c1f',
+  ASH: '#4a3f3a',
+  EMBER: '#ffa040',
 } as const
 
 /** World 5 — The Abyss. Near-monochrome, alien. */
@@ -74,6 +89,8 @@ export const ABYSS = {
   BIO_CYAN: '#00e5cc',
   BIO_MAGENTA: '#e040fb',
   SHAPE: '#1a1a2e',
+  BIO_DIM: '#0a3d3a',
+  BONE_PALE: '#9fb0c0',
 } as const
 
 /**
