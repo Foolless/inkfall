@@ -38,6 +38,9 @@ import { Audio } from './engine/audio/sfx.js'
 import { trackFor } from './content/music/world1.js'
 import { chapterOf } from './content/chapters.js'
 
+/** Shared empty list, so a paused frame allocates nothing to say "no cues". */
+const NO_CUES: readonly import('./game/cues.js').Cue[] = []
+
 const canvas = document.getElementById('game')
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing')
 
@@ -136,7 +139,7 @@ function showToast(message: string): void {
  * and finding yourself in World 3 is one frame, and the pearls belong to the
  * world behind you.
  */
-function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number): void {
+function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number, cleared: boolean): void {
   if (!canWrite) return
 
   // Upgrades first: they are the thing whose loss would cost the most, and
@@ -144,6 +147,14 @@ function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number
   if (session.granted.length > 0) {
     save = recordUpgrades(save, session.granted)
     session.granted.length = 0
+  }
+
+  // Everything below is about a level that was *finished*. Deep Jet flags a
+  // save mid-level, and treating that as a clear unlocked the next world and
+  // wrote a partial time in as a personal best.
+  if (!cleared) {
+    writeSave(window.localStorage, save)
+    return
   }
 
   save = recordClear(save, finished.id, { pearls, seconds })
@@ -336,11 +347,21 @@ startLoop({
     }
 
     updateSession(session, input)
-    for (const cue of session.world.cues) audio.play(cue)
+    // Only when the world actually stepped. `cues` is cleared inside
+    // `world.update`, so on a paused, cleared or game-over screen the last
+    // simulated frame's cues sat there and re-fired sixty times a second.
+    const stepped = session.screen === 'playing'
+    if (stepped) for (const cue of session.world.cues) audio.play(cue)
     if (session.screen !== screenBefore) audio.play('menu')
     if (session.pendingSave) {
       session.pendingSave = false
-      persist(levelBefore, owed.pearls, owed.seconds)
+      // A level is only *finished* when the session says so, and it says so with
+      // its own flag. Deep Jet raises `pendingSave` mid-level to bank the
+      // upgrade the instant it is picked up (§8.5); treating that as a clear
+      // unlocked the next world and wrote a partial-run time in as the PB.
+      const cleared = session.pendingClear
+      session.pendingClear = false
+      persist(levelBefore, owed.pearls, owed.seconds, cleared)
     }
     if (session.pendingScore) {
       session.pendingScore = false
@@ -394,7 +415,7 @@ startLoop({
     updateJuice(
       renderer.juice,
       {
-        cues: session.world.cues,
+        cues: stepped ? session.world.cues : NO_CUES,
         x: p.x,
         y: p.y,
         w: p.w,

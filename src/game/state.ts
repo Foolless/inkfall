@@ -166,6 +166,15 @@ export interface Session {
    */
   pendingScore: boolean
   /**
+   * Set when a level was actually *finished*, as opposed to merely worth saving.
+   *
+   * The two are different and conflating them cost a personal best: Deep Jet
+   * raises `pendingSave` mid-level so the upgrade is banked the instant it is
+   * picked up (§8.5), and the host treated that as a clear — unlocking the next
+   * world and writing a partial-run time in as the permanent PB.
+   */
+  pendingClear: boolean
+  /**
    * The run being recorded, for a personal-best ghost (§8.4).
    *
    * Always recording, whether or not the ghost is switched on for *display* —
@@ -270,6 +279,7 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
     uiFrames: 0,
     pendingSave: false,
     pendingScore: false,
+    pendingClear: false,
     recorder: createRecorder(),
     pendingGhost: null,
     ghost: null,
@@ -571,6 +581,7 @@ function bankUpgrades(s: Session, earned: UpgradeId[]): void {
  */
 function finishLevel(s: Session): void {
   s.score += tallyTotal(s.tally)
+  s.pendingClear = true
   // The run timer is the sum of the level timers (§8.4) — added here, where a
   // level is actually finished, so a level abandoned to the map adds nothing.
   s.runFrames += s.levelFrames

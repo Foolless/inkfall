@@ -397,6 +397,7 @@ export function update(w: World, input: InputFrame): void {
 
   resolveCombat(w, isHeld(input, Act.Jump))
   resolveBossInk(w)
+  clearDetonations(w)
   // After the move, so the frame a shell slams shut on Nib is the frame he
   // dies rather than the one after.
   checkClams(w.clams, w.player)
@@ -538,10 +539,22 @@ function tryShoot(w: World, input: InputFrame): void {
 function detonateBombs(w: World): void {
   for (const p of w.projectiles) {
     if (!p.detonated) continue
-    p.detonated = false
     w.cues.push('blast')
     for (const tile of crackedInBlast(w.map, p, w.blastScratch)) w.collapsed.add(tile)
   }
+}
+
+/**
+ * Clear the detonation flags, once both passes that care have run.
+ *
+ * This used to happen inside `detonateBombs`, which runs *before* the combat
+ * pass — so `resolveBlasts` never saw a single detonation and an Ink Bomb
+ * opened walls but could not kill anything. The flag has to outlive both
+ * readers, so it is cleared at the end of the frame instead of by the first
+ * thing to look at it.
+ */
+function clearDetonations(w: World): void {
+  for (const p of w.projectiles) p.detonated = false
 }
 
 /**

@@ -58,15 +58,17 @@ function wouldWalkOffLedge(map: TileMap, e: Enemy, collapsed: ReadonlySet<number
 /**
  * A vent. It is scenery until you count how many shrimp it has produced.
  *
- * Capped at four alive at once from any one vent. Without a cap, a player who
- * backtracks through B1 meets a room with sixty shrimp in it, which is not
- * harder — it is a different game, and a slower one.
+ * The cap — four *alive at once* from any one vent — belongs to the world,
+ * which is the only thing that can see how many are still alive. This used to
+ * also keep its own running total and stop at four, which made it a **lifetime**
+ * cap: killing four shrimp retired the vent permanently, and §7.6 B1's whole
+ * lever is that inking a vent is what shuts it up. `spawned` is kept as a
+ * counter because the renderer pulses the mouth on it, but it gates nothing.
  */
 export function updateShrimpVent(e: Enemy, spawn: (x: number, y: number) => boolean): void {
   e.clock++
   const c = ENEMIES.VENT_CYCLE
   if (((e.clock % c) + c) % c !== 0) return
-  if (e.spawned >= ENEMIES.VENT_MAX_ALIVE) return
   if (spawn(e.x + e.w / 2, e.y)) e.spawned++
 }
 

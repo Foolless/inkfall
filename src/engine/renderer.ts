@@ -1,6 +1,6 @@
 import { CHARGED_TIER, DISPLAY } from '../game/constants.js'
 import { Tile, tileAt, type TileId } from '../game/tilemap.js'
-import { tierOf } from '../game/player.js'
+import { inkMax } from '../game/player.js'
 import type { World } from '../game/world.js'
 import type { Camera } from './camera.js'
 import { frameFor, paletteFor, type Anim } from './anim.js'
@@ -638,8 +638,12 @@ export class Renderer {
     // Invulnerability flickers at 30 Hz, which §13's photosensitivity provision
     // caps at 3 Hz — slow enough to still read as "a hit landed" and far under
     // the threshold that matters.
-    const period = this.settings.flashReduction ? 10 : 1
-    if (p.alive && p.iframes > 0 && (w.frame >> period) % 2 === 0) return
+    //
+    // Ten frames on, ten frames off, counted rather than shifted: `>> 10` is one
+    // toggle per 1,024 frames, which left Nib *entirely invisible* for about
+    // half of all 90-frame invulnerability windows.
+    const period = this.settings.flashReduction ? 10 : 2
+    if (p.alive && p.iframes > 0 && Math.floor(w.frame / period) % 2 === 0) return
 
     const frame = frameFor(anim, p.tier)
     const palette = paletteFor(p.tier)
@@ -749,7 +753,10 @@ export class Renderer {
     const { ctx } = this
     const w = s.world
     const p = w.player
-    const max = tierOf(p).inkMax
+    // `inkMax`, not the tier's own figure: Deep Jet adds a pip on top of the
+    // tier (§8.5), and reading the tier alone hid it completely.
+    const max = inkMax(p)
+    const slots = Math.max(3, max)
 
     ctx.fillStyle = 'rgba(5,9,15,0.55)'
     ctx.fillRect(0, 0, DISPLAY.WIDTH, 16)
@@ -758,7 +765,7 @@ export class Renderer {
     // and read as a broken HUD. It says what is actually true instead.
     drawText(ctx, s.assist ? 'NIBx∞' : `NIBx${s.lives}`, 4, 5, SHARED.UI_TEXT)
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < slots; i++) {
       const x = 46 + i * 10
       if (i >= max) {
         // Spent: the third slot is a broken outline, not a missing pip. The

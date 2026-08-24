@@ -20,7 +20,7 @@
  * kind of statement and should be readable side by side.
  */
 
-import { BOSSES, CHARGED_TIER, DISPLAY, ENEMIES, INK, PHYSICS, RULES, UPGRADES } from './constants.js'
+import { CHARGED_TIER, DISPLAY, ENEMIES, INK, PHYSICS, RULES, UPGRADES } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
 import {
   canStomp,
@@ -233,18 +233,22 @@ function resolveBoss(w: CombatState, approach: Approach, stomped: boolean, jumpH
 
   // How Nib is currently touching things, in the vocabulary the parts speak.
   // Ink is handled where all the other ink is; this is the contact half.
-  const how: PartHit | null = approach.descending || stomped ? 'stomp' : p.dashFrames > 0 ? 'dash' : null
+  //
+  // A dash is checked *first*. Descending and dashing are not exclusive — the
+  // Kelp Warden's third phase adds a downdraft to `vy` every frame — and
+  // resolving `descending` first meant every dash into that arena read as a
+  // stomp, so the Warden's dash-gated core refused all of them and the player
+  // took a tier for it.
+  const how: PartHit | null = p.dashFrames > 0 ? 'dash' : approach.descending || stomped ? 'stomp' : null
 
   // The King is the one boss whose body *is* the open part, because he predates
   // the part system and his window is a state rather than a box.
   if (boss.id === 'hermitKing') {
     if (!boxesOverlap(p, boss)) return
     if (boss.state === 'exposed' && (approach.descending || stomped)) {
-      const killed = boss.hits + 1 >= BOSSES.HITS
-      if (hitBoss(boss, KING_BACK, 'stomp') === 'hit') {
-        payBossHit(w, 'hit', jumpHeld)
-        if (killed) w.score += POINTS.BOSS
-      }
+      // `payBossHit` already pays the kill bonus when the hit is the last one,
+      // so paying it again here made the King worth 10,500 instead of 5,500.
+      if (hitBoss(boss, KING_BACK, 'stomp') === 'hit') payBossHit(w, 'hit', jumpHeld)
       return
     }
     takeHit(w, boss)

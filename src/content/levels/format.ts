@@ -230,7 +230,11 @@ export function loadLevel(def: LevelDef): LoadedLevel {
   const map = parseTiles(def.tiles)
 
   const starts = map.entities.filter((e) => e.kind === 'start')
-  if (starts.length > 1) fail(`${starts.length} starts (S); a level has exactly one`)
+  // `!== 1`, not `> 1`: a grid with no `S` at all fell straight through to
+  // `starts[0]!.tx` and threw a bare TypeError, which for a level compiled into
+  // the bundle means the module crashes on import rather than saying what is
+  // wrong with it.
+  if (starts.length !== 1) fail(`${starts.length} starts (S); a level has exactly one`)
   const start = { x: starts[0]!.tx, y: starts[0]!.ty }
 
   const exits = map.entities.filter((e) => e.kind === 'exit')
