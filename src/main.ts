@@ -22,6 +22,7 @@ import {
   type SaveData,
 } from './engine/save.js'
 import { loadGhost, writeGhost } from './engine/ghosts.js'
+import { updateJuice } from './engine/juice.js'
 import { bindsFrom, OPTION_ROWS, rebind } from './game/options.js'
 import { idsOf, maskOf } from './game/upgrades.js'
 import { Audio } from './engine/audio/sfx.js'
@@ -332,8 +333,26 @@ startLoop({
       loadGhostForLevel()
     }
     // Animation advances on the simulation step, not the render, so a cycle
-    // never speeds up on a fast display or stutters on a slow one.
+    // never speeds up on a fast display or stutters on a slow one. The juice
+    // rides along for the same reason — and, unlike the animation, it is fed
+    // the cues the world just raised rather than reading the world itself.
     updateAnim(anim, session.world.player)
+    const p = session.world.player
+    updateJuice(
+      renderer.juice,
+      {
+        cues: session.world.cues,
+        x: p.x,
+        y: p.y,
+        w: p.w,
+        h: p.h,
+        grounded: p.grounded,
+        vy: p.vy,
+        tier: p.tier,
+        alive: p.alive,
+      },
+      save.settings.screenShake,
+    )
   },
   render: (frameTimeMs) => {
     debug.sample(frameTimeMs)

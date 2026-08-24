@@ -12,6 +12,9 @@ import { SHARED } from '../content/palettes.js'
 import { defaultSave, type HighScore, type Settings } from './save.js'
 import { drawText, drawTextCentred, drawTextRight, textWidth } from './text.js'
 import { clamp } from './camera.js'
+import { createJuice, onScreen, shakeOffset, type Juice } from './juice.js'
+
+const ZERO_SHAKE = { x: 0, y: 0 }
 import {
   drawGameClear,
   drawGameOver,
@@ -107,6 +110,9 @@ export class Renderer {
   /** The live settings, likewise handed in rather than read. */
   settings: Settings = defaultSave().settings
 
+  /** Render-side juice: shake and particles. Never part of the simulation. */
+  juice: Juice = createJuice()
+
   draw(s: Session, cam: Camera, anim: Anim, pearls = 0): void {
     const { ctx } = this
     ctx.imageSmoothingEnabled = false
@@ -134,8 +140,12 @@ export class Renderer {
 
     const w = s.world
     // Everything below floors its coordinates: sub-pixel state, integer pixels.
-    const ox = Math.floor(cam.x)
-    const oy = Math.floor(cam.y)
+    // The shake is added to the camera *here*, in the render, so the simulation
+    // never sees it — two identical input logs must produce two identical
+    // worlds whether or not either of them was shaking (§12.6).
+    const shake = s.screen === 'playing' ? shakeOffset(this.juice) : ZERO_SHAKE
+    const ox = Math.floor(cam.x) + shake.x
+    const oy = Math.floor(cam.y) + shake.y
     const set = tilesetOf(chapterOf(s.level.chapter).tileset)
 
     ctx.fillStyle = set?.sky ?? '#0b1116'
@@ -161,6 +171,7 @@ export class Renderer {
     // player needs to see (§13). The chapter's own value is the default, so a
     // slider left alone changes nothing.
     if (dark !== undefined) this.drawDarkness(w, ox, oy, Math.max(dark, this.settings.lightRadius))
+    this.drawParticles(ox, oy)
     this.drawPressure(w)
     // Only while playing: a key hint has no business on top of a tally screen.
     if (s.screen === 'playing') this.drawHints(w, ox, oy)
@@ -660,6 +671,24 @@ export class Renderer {
     ctx.globalAlpha = 0.28
     ctx.fillStyle = SHARED.NIB_PALE
     ctx.fillRect(Math.floor(at.x - ox), Math.floor(at.y - oy), p.w, p.h)
+    ctx.globalAlpha = 1
+  }
+
+  /**
+   * Silt and ink. Two looks from one pool: silt is sand-coloured and falls,
+   * ink is the player's own colour and hangs.
+   */
+  private drawParticles(ox: number, oy: number): void {
+    const { ctx } = this
+    for (const p of this.juice.particles) {
+      if (!p.alive) continue
+      const x = Math.floor(p.x - ox)
+      const y = Math.floor(p.y - oy)
+      if (!onScreen(x, y)) continue
+      ctx.globalAlpha = Math.min(1, p.life / p.maxLife) * (p.kind === 0 ? 0.5 : 0.75)
+      ctx.fillStyle = p.kind === 0 ? SHARED.UI_DIM : SHARED.INK_CYAN
+      ctx.fillRect(x, y, 1, 1)
+    }
     ctx.globalAlpha = 1
   }
 
