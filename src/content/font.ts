@@ -85,6 +85,11 @@ export const GLYPHS: Record<string, readonly string[]> = {
   '↓': G('..#..', '..#..', '..#..', '..#..', '##.##', '.###.', '..#..'),
   /** Lives in Assist Mode, where the counter never goes down (PRD §13). */
   '∞': G('.....', '.....', '##.##', '#.#.#', '##.##', '.....', '.....'),
+  /** The menu cursor, on the world map and the options screen. */
+  '>': G('.....', '.#...', '..#..', '...#.', '..#..', '.#...', '.....'),
+  '<': G('.....', '...#.', '..#..', '.#...', '..#..', '...#.', '.....'),
+  /** A found pearl on the world map. Its unfound twin is the letter O. */
+  '*': G('.....', '#.#.#', '.###.', '#####', '.###.', '#.#.#', '.....'),
 }
 
 /** Anything unmapped draws as this, so a missing glyph is visible, not silent. */

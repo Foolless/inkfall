@@ -24,6 +24,18 @@ async function confirmUntil(page: Page, screen: string): Promise<void> {
 }
 
 /**
+ * Wait for the simulation to advance N frames.
+ *
+ * Not `waitForTimeout`: the game steps on a fixed 60 Hz accumulator, and on a
+ * loaded machine 120 ms of wall clock is not seven frames. Every "press a key
+ * and see what happened" check below needs *frames*, not milliseconds.
+ */
+async function advance(page: Page, frames: number): Promise<void> {
+  const from = await page.evaluate(() => window.__inkfall!.frame())
+  await page.waitForFunction((n) => (window.__inkfall?.frame() ?? 0) >= n, from + frames)
+}
+
+/**
  * Browser smoke: does it load, run, respond to input, and survive a reload?
  *
  * Deliberately thin. Rendering internals are covered by human eyes, not by
@@ -69,7 +81,7 @@ test('the simulation advances and responds to the keyboard', async ({ page }) =>
   // Dashing must spend a pip — proof that input reaches the simulation.
   const inkBefore = await page.evaluate(() => window.__inkfall!.ink())
   await page.keyboard.press('KeyX')
-  await page.waitForTimeout(120)
+  await advance(page, 10)
   const inkAfter = await page.evaluate(() => window.__inkfall!.ink())
   expect(inkAfter).toBeLessThan(inkBefore)
 })
@@ -298,7 +310,7 @@ test('assist mode is one key on the title, and it survives a reload', async ({ p
   await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
   for (let i = 0; i < 5; i++) {
     await page.evaluate(() => window.__inkfall!.kill())
-    await page.waitForTimeout(120)
+    await advance(page, 10)
   }
   expect(await page.evaluate(() => window.__inkfall!.screen())).toBe('playing')
   expect(await page.evaluate(() => window.__inkfall!.lives())).toBe(3)
@@ -346,6 +358,61 @@ test('the world map remembers how far you got, across a reload', async ({ page }
   await page.keyboard.press('ArrowUp')
   await confirmUntil(page, 'playing')
   expect(await page.evaluate(() => window.__inkfall!.level())).toBe('w01-tidepools')
+
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/**
+ * Options, driven from the keyboard: change a setting, rebind a key, and check
+ * both survive a reload.
+ *
+ * Rebinding is the one setting that can only be verified in a real browser —
+ * it changes what the browser's own key events mean, and a unit test with a
+ * fake window proves the table is right without proving it is *installed*.
+ */
+test('options change settings and rebind keys, and both persist', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/?level=greybox')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+
+  // Up from the title opens Options; the first row is Assist Mode.
+  await page.keyboard.press('ArrowUp')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'options')
+  await page.keyboard.press('ArrowRight')
+  await page.waitForFunction(() => window.__inkfall!.assist())
+
+  // Walk down to INK DASH and put it on Q.
+  const dashRow = await page.evaluate(() => window.__inkfall!.optionRows().indexOf('bind.dash'))
+  expect(dashRow).toBeGreaterThan(0)
+  for (let i = 0; i < dashRow; i++) await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.listening() === 'bind.dash')
+  await page.keyboard.press('KeyQ')
+  await page.waitForFunction(() => window.__inkfall!.listening() === null)
+
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'title')
+
+  const stored = await page.evaluate(() => JSON.parse(window.localStorage.getItem('inkfall.save.v1')!))
+  expect(stored.settings.assistMode).toBe(true)
+  expect(stored.settings.keybinds.dash).toEqual(['KeyQ'])
+
+  // And the new key actually dashes, while the old one no longer does.
+  await page.reload()
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await confirmUntil(page, 'playing')
+  await page.waitForFunction(() => (window.__inkfall?.frame() ?? 0) > 10)
+
+  const before = await page.evaluate(() => window.__inkfall!.ink())
+  await page.keyboard.press('KeyX')
+  await advance(page, 15)
+  expect(await page.evaluate(() => window.__inkfall!.ink()), 'X still dashed after rebinding').toBe(before)
+
+  await page.keyboard.press('KeyQ')
+  await advance(page, 15)
+  expect(await page.evaluate(() => window.__inkfall!.ink())).toBeLessThan(before)
 
   expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
 })

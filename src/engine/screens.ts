@@ -11,7 +11,8 @@ import { DISPLAY } from '../game/constants.js'
 import { formatScore, formatSplit, formatTime, levelSplit, tallyRevealed, tallyShown, type Session } from '../game/state.js'
 import { SHARED, SHALLOWS } from '../content/palettes.js'
 import { mapTotals } from '../game/map.js'
-import type { HighScore } from './save.js'
+import type { HighScore, Settings } from './save.js'
+import { OPTION_ROWS } from '../game/options.js'
 import { drawText, drawTextCentred, drawTextRight } from './text.js'
 
 const W = DISPLAY.WIDTH
@@ -143,6 +144,59 @@ export function drawWorldMap(ctx: CanvasRenderingContext2D, s: Session): void {
   const totals = mapTotals(s.nodes)
   drawText(ctx, `PEARLS ${totals.pearls}/${totals.pearlsPossible}`, 10, H - 12, SHARED.PEARL)
   drawTextRight(ctx, pulse(s.uiFrames) ? 'SPACE TO DIVE' : '', W - 10, H - 12, SHARED.UI_TEXT)
+}
+
+/**
+ * The options screen. PRD §13's accessibility provisions and §8.4's timer.
+ *
+ * Accessibility first and no submenu, deliberately: the player who came here
+ * because the flashing hurts should not scroll past two volume sliders to find
+ * the thing they came for, and the one who needs a bigger light radius is
+ * looking for it while playing the darkest world in the game.
+ */
+export function drawOptions(
+  ctx: CanvasRenderingContext2D,
+  settings: Settings,
+  state: { cursor: number; listening: string | null },
+  frame: number,
+): void {
+  ctx.fillStyle = SHARED.VOID
+  ctx.fillRect(0, 0, W, H)
+  drawTextCentred(ctx, 'OPTIONS', W / 2, 10, SHARED.INK_CYAN)
+
+  const step = 10
+  const top = 26
+  const view = H - top - 22
+  const span = Math.max(0, OPTION_ROWS.length * step - view)
+  const scroll = Math.min(span, Math.max(0, state.cursor * step - view / 2 + step))
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, top - 8, W, view + 10)
+  ctx.clip()
+
+  OPTION_ROWS.forEach((row, i) => {
+    const y = top + i * step - scroll
+    if (y < top - step || y > top + view) return
+    const here = i === state.cursor
+    const waiting = state.listening === row.id
+    const ink = waiting ? SHARED.SHELL : here ? SHARED.INK_CYAN : SHARED.UI_TEXT
+
+    if (here) drawText(ctx, '>', 8, y, SHARED.INK_CYAN)
+    // §13's own provisions carry a mark, so the screen says which rows are
+    // there for access rather than for taste.
+    if (row.a11y) drawText(ctx, '+', 18, y, here ? SHARED.INK_CYAN : SHARED.UI_DIM)
+    drawText(ctx, row.label, 28, y, ink)
+    drawTextRight(ctx, waiting ? 'PRESS A KEY' : row.value(settings), W - 12, y, waiting ? SHARED.SHELL : ink)
+  })
+  ctx.restore()
+
+  const hint = state.listening
+    ? 'ESC TO CANCEL'
+    : OPTION_ROWS[state.cursor]?.kind === 'bind'
+      ? 'SPACE TO REBIND   ESC TO GO BACK'
+      : 'LEFT RIGHT TO CHANGE   ESC TO GO BACK'
+  if (pulse(frame)) drawTextCentred(ctx, hint, W / 2, H - 10, SHARED.UI_DIM)
 }
 
 /**

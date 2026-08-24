@@ -9,10 +9,19 @@ import { bubbleBox, clamState, isTelegraphing, pressureLoad } from '../game/haza
 import { formatScore, formatTime, runFramesNow, type Session } from '../game/state.js'
 import { ghostAt } from '../game/ghost.js'
 import { SHARED } from '../content/palettes.js'
-import type { HighScore } from './save.js'
+import { defaultSave, type HighScore, type Settings } from './save.js'
 import { drawText, drawTextCentred, drawTextRight, textWidth } from './text.js'
 import { clamp } from './camera.js'
-import { drawGameClear, drawGameOver, drawLevelClear, drawPause, drawScores, drawTitle, drawWorldMap } from './screens.js'
+import {
+  drawGameClear,
+  drawGameOver,
+  drawLevelClear,
+  drawOptions,
+  drawPause,
+  drawScores,
+  drawTitle,
+  drawWorldMap,
+} from './screens.js'
 import { chapterOf } from '../content/chapters.js'
 import { tilesetOf, type Tileset } from '../content/tilesets/index.js'
 import { PICKUP_SPRITES } from '../content/sprites/pickups.js'
@@ -95,6 +104,8 @@ export class Renderer {
 
   /** The high-score table, handed in by the host — the renderer reads no storage. */
   scores: readonly HighScore[] = []
+  /** The live settings, likewise handed in rather than read. */
+  settings: Settings = defaultSave().settings
 
   draw(s: Session, cam: Camera, anim: Anim, pearls = 0): void {
     const { ctx } = this
@@ -102,6 +113,10 @@ export class Renderer {
 
     if (s.screen === 'title') {
       drawTitle(ctx, s)
+      return
+    }
+    if (s.screen === 'options') {
+      drawOptions(ctx, this.settings, s.options, s.uiFrames)
       return
     }
     if (s.screen === 'scores') {
@@ -142,7 +157,10 @@ export class Renderer {
     // The abyss, last of all: everything above is drawn and then most of it is
     // taken away again. PRD §7.6 — a 5-tile radius, and the lures.
     const dark = chapterOf(s.level.chapter).dark
-    if (dark !== undefined) this.drawDarkness(w, ox, oy, dark)
+    // The chapter says the world is dark; the setting says how much of it this
+    // player needs to see (§13). The chapter's own value is the default, so a
+    // slider left alone changes nothing.
+    if (dark !== undefined) this.drawDarkness(w, ox, oy, Math.max(dark, this.settings.lightRadius))
     this.drawPressure(w)
     // Only while playing: a key hint has no business on top of a tally screen.
     if (s.screen === 'playing') this.drawHints(w, ox, oy)
@@ -606,7 +624,11 @@ export class Renderer {
     const { ctx } = this
     const p = w.player
     // Invulnerability flickers, which also communicates that a hit landed.
-    if (p.alive && p.iframes > 0 && (w.frame >> 1) % 2 === 0) return
+    // Invulnerability flickers at 30 Hz, which §13's photosensitivity provision
+    // caps at 3 Hz — slow enough to still read as "a hit landed" and far under
+    // the threshold that matters.
+    const period = this.settings.flashReduction ? 10 : 1
+    if (p.alive && p.iframes > 0 && (w.frame >> period) % 2 === 0) return
 
     const frame = frameFor(anim, p.tier)
     const palette = paletteFor(p.tier)

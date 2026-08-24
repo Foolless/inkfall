@@ -68,6 +68,14 @@ export interface Settings {
   musicVolume: number
   sfxVolume: number
   assistMode: boolean
+  /**
+   * World 5's light radius in tiles. §13 offers 5 / 7 / 10.
+   *
+   * A setting rather than a chapter property, unlike `Chapter.dark` — the
+   * chapter says the world *is* dark, and this says how much of it one
+   * particular player needs to be able to see.
+   */
+  lightRadius: number
 }
 
 export interface SaveData {
@@ -93,6 +101,7 @@ export function defaultSave(): SaveData {
       musicVolume: 0.7,
       sfxVolume: 0.9,
       assistMode: false,
+      lightRadius: 5,
     },
   }
 }

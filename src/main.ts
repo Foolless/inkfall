@@ -1,7 +1,7 @@
 import { createAnim, updateAnim } from './engine/anim.js'
 import { createCamera, updateCamera } from './engine/camera.js'
 import { DebugOverlay } from './engine/debug.js'
-import { Keyboard } from './engine/input.js'
+import { DEFAULT_BINDS, Keyboard } from './engine/input.js'
 import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
 import { campaign, levelDef } from './content/levels/index.js'
@@ -11,6 +11,7 @@ import type { LevelDef } from './content/levels/format.js'
 import { kill } from './game/player.js'
 import {
   checkUnlocks,
+  defaultSave,
   loadSave,
   recordClear,
   recordHighScore,
@@ -21,6 +22,7 @@ import {
   type SaveData,
 } from './engine/save.js'
 import { loadGhost, writeGhost } from './engine/ghosts.js'
+import { bindsFrom, OPTION_ROWS, rebind } from './game/options.js'
 import { idsOf, maskOf } from './game/upgrades.js'
 import { Audio, type Cue } from './engine/audio/sfx.js'
 import { trackFor } from './content/music/world1.js'
@@ -176,7 +178,90 @@ function bankScore(): void {
   writeSave(window.localStorage, save)
 }
 
+/**
+ * Everything the options screen does. §11.1 and §13.
+ *
+ * Driven from raw key events rather than through the action masks, for one
+ * reason that decides the whole design: while a bind row is listening, *every*
+ * key has to stop meaning what it usually means — including the ones that
+ * would otherwise move the cursor off the row being rebound.
+ */
+function stepOptions(e: KeyboardEvent): boolean {
+  if (session.screen !== 'options') return false
+  const state = session.options
+
+  if (state.listening !== null) {
+    e.preventDefault()
+    if (e.code === 'Escape') {
+      state.listening = null
+      return true
+    }
+    // Anything else becomes the binding, including keys the game already uses:
+    // taking a key off whatever held it is `rebind`'s job, and refusing the
+    // press would leave a player stuck on a row with no way out but Escape.
+    applySettings(rebind(save.settings, state.listening.slice('bind.'.length), e.code))
+    state.listening = null
+    return true
+  }
+
+  const row = OPTION_ROWS[state.cursor]
+  switch (e.code) {
+    case 'Escape':
+      session.screen = session.optionsFrom
+      session.uiFrames = 0
+      break
+    case 'ArrowUp':
+    case 'KeyW':
+      state.cursor = Math.max(0, state.cursor - 1)
+      break
+    case 'ArrowDown':
+    case 'KeyS':
+      state.cursor = Math.min(OPTION_ROWS.length - 1, state.cursor + 1)
+      break
+    case 'ArrowLeft':
+    case 'KeyA':
+      if (row?.adjust) applySettings(row.adjust(save.settings, -1))
+      break
+    case 'ArrowRight':
+    case 'KeyD':
+      if (row?.adjust) applySettings(row.adjust(save.settings, 1))
+      break
+    case 'Space':
+    case 'Enter':
+      if (row?.kind === 'bind') state.listening = row.id
+      else if (row?.id === 'reset') applySettings(defaultSave().settings)
+      else if (row?.adjust) applySettings(row.adjust(save.settings, 1))
+      break
+    default:
+      return false
+  }
+  e.preventDefault()
+  return true
+}
+
+/**
+ * Store a settings change and make it take effect immediately.
+ *
+ * Immediately matters for every row on the screen: a volume slider you cannot
+ * hear, or a light radius that waits for the next level, is a control that
+ * looks broken while it is working.
+ */
+function applySettings(next: SaveData['settings']): void {
+  save = { ...save, settings: next }
+  session.assist = next.assistMode
+  session.timerDisplay = next.timerDisplay
+  keyboard.setBinds(bindsFrom(next, DEFAULT_BINDS))
+  audio.configure({ musicVolume: next.musicVolume, sfxVolume: next.sfxVolume })
+  renderer.settings = next
+  if (canWrite) writeSave(window.localStorage, save)
+}
+
 window.addEventListener('keydown', (e) => {
+  if (stepOptions(e)) {
+    // The options screen consumed it, so the simulation must not also see it.
+    keyboard.flush()
+    return
+  }
   if (e.code === 'F1') {
     e.preventDefault()
     debug.toggle()
@@ -205,6 +290,10 @@ window.addEventListener('keydown', (e) => {
     writeSave(window.localStorage, save)
   }
 })
+
+// Everything the save already holds, applied before the first frame: bindings,
+// volumes, the timer, the light radius, Assist Mode.
+applySettings(save.settings)
 
 const fit = () => renderer.resize(window.innerWidth, window.innerHeight)
 window.addEventListener('resize', fit)
@@ -274,6 +363,8 @@ declare global {
       upgrades: () => string[]
       assist: () => boolean
       setAssist: (on: boolean) => boolean
+      optionRows: () => string[]
+      listening: () => string | null
       reset: () => void
       kill: () => void
       clear: () => void
@@ -313,5 +404,7 @@ window.__inkfall = {
   upgrades: () => idsOf(session.upgrades),
   assist: () => session.assist,
   setAssist: (on: boolean) => setAssist(session, on),
+  optionRows: () => OPTION_ROWS.map((r) => r.id),
+  listening: () => session.options.listening,
   audio: () => ({ started: audio.started, playing: audio.nowPlaying, muted: audio.muted }),
 }

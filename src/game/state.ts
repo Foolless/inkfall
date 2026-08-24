@@ -18,7 +18,16 @@ import { buildMap, furthestUnlocked, moveCursor, NO_PROGRESS, type MapNode, type
 import { createRecorder, finishRecording, resetRecorder, sample, type GhostRecorder, type GhostTrack } from './ghost.js'
 import type { LevelDef } from '../content/levels/format.js'
 
-export type Screen = 'title' | 'worldMap' | 'scores' | 'playing' | 'paused' | 'levelClear' | 'gameOver' | 'gameClear'
+export type Screen =
+  | 'title'
+  | 'worldMap'
+  | 'scores'
+  | 'options'
+  | 'playing'
+  | 'paused'
+  | 'levelClear'
+  | 'gameOver'
+  | 'gameClear'
 
 /** How many frames the tally holds between lines as it counts up. */
 export const TALLY_LINE_FRAMES = 24
@@ -174,6 +183,15 @@ export interface Session {
   pendingGhost: GhostTrack | null
   /** The ghost to draw, handed in by the host when the level starts. */
   ghost: GhostTrack | null
+  /** The options screen's cursor. */
+  options: OptionsState
+  /**
+   * Where the options screen came from, so backing out returns there.
+   *
+   * §11.1 reaches Options from both the title and the pause menu, and landing
+   * on the title after adjusting the volume mid-level would throw the run away.
+   */
+  optionsFrom: Screen
   /**
    * What the HUD's clock shows. §8.4 makes it a setting and off by default:
    * a timer nobody asked for is a scoreboard on a game about exploring.
@@ -199,6 +217,18 @@ export interface SessionOptions {
   direct?: boolean
   /** What the HUD's clock shows. §8.4 — off by default. */
   timerDisplay?: TimerDisplay
+}
+
+/**
+ * The options screen's cursor and its one piece of modal state.
+ *
+ * `listening` is the row waiting for a key press, or null. It is here rather
+ * than in the host because rebinding is a screen mode — every other key has to
+ * stop meaning what it usually means while it is on.
+ */
+export interface OptionsState {
+  cursor: number
+  listening: string | null
 }
 
 /** A fresh save has found nothing anywhere. */
@@ -244,7 +274,17 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
     pendingGhost: null,
     ghost: null,
     timerDisplay: options.timerDisplay ?? 'off',
+    options: { cursor: 0, listening: null },
+    optionsFrom: 'title',
   }
+}
+
+/** Open the options screen, remembering where to go back to. */
+export function openOptions(s: Session): void {
+  s.optionsFrom = s.screen
+  s.options = { cursor: 0, listening: null }
+  s.screen = 'options'
+  s.uiFrames = 0
 }
 
 /** The run total as it stands: finished levels plus the one in progress. */
@@ -295,10 +335,18 @@ export function updateSession(s: Session, input: InputFrame): void {
         s.uiFrames = 0
         return
       }
+      if (isPressed(input, Act.Up)) {
+        openOptions(s)
+        return
+      }
       if (confirmed(input)) {
         if (s.direct) startRun(s)
         else openMap(s)
       }
+      return
+    case 'options':
+      // Everything here is the host's: it owns the settings and the keyboard.
+      // The session only holds the cursor, so that backing out lands correctly.
       return
     case 'scores':
       if (confirmed(input) && s.uiFrames > 20) s.screen = 'title'
@@ -314,6 +362,7 @@ export function updateSession(s: Session, input: InputFrame): void {
       // Quit to the map (§11.1). The level is abandoned, not failed: nothing
       // is re-locked and no continue is spent — the same terms a replay gets.
       else if (isPressed(input, Act.Down)) openMap(s)
+      else if (isPressed(input, Act.Up)) openOptions(s)
       return
     case 'levelClear':
       s.tallyClock++

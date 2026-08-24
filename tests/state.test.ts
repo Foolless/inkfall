@@ -16,6 +16,9 @@ import { POINTS } from '../src/game/score.js'
 import { kill } from '../src/game/player.js'
 import { glyph, MISSING } from '../src/content/font.js'
 import { campaign } from '../src/content/levels/index.js'
+import { buildMap } from '../src/game/map.js'
+import { OPTION_ROWS } from '../src/game/options.js'
+import { defaultSave } from '../src/engine/save.js'
 import { levelFrom } from './helpers.js'
 
 const LEVEL = levelFrom(['S........E', '##########'], 'flow')
@@ -353,6 +356,28 @@ describe('the font', () => {
    * `HOLD ↑ + X TO DASH UP` — Gate 1's entire fix for nobody finding the
    * up-dash — drew the arrow as a missing-character box for two phases.
    */
+  /**
+   * The map's cursor and its pearl marks, from the source of truth rather than
+   * from a list somebody remembered to update. `>` had been drawing as a
+   * missing-character box since the map was built, for exactly that reason.
+   */
+  test('every glyph the menus use is drawable', () => {
+    const settings = defaultSave().settings
+    const menus = [
+      '> < * o + -',
+      'THE DESCENT',
+      'SPACE TO DIVE',
+      'PEARLS 0/15',
+      'OPTIONS',
+      'PRESS A KEY',
+      ...OPTION_ROWS.map((r) => r.label + r.value(settings)),
+      ...buildMap().map((n) => n.name.toUpperCase()),
+    ].join('')
+    for (const ch of new Set(menus)) {
+      expect(glyph(ch), `no glyph for ${JSON.stringify(ch)}`).not.toBe(MISSING)
+    }
+  })
+
   test('every hint in every shipped level is drawable, arrows included', () => {
     for (const def of campaign()) {
       for (const hint of def.hints ?? []) {
