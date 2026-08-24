@@ -19,6 +19,7 @@ import { livesEarned, POINTS } from './score.js'
 import {
   checkClams,
   checkPressure,
+  pressureLoad,
   clamSolids,
   rideBubbles,
   riseAt,
@@ -37,6 +38,7 @@ import {
 import { arenaBox, arenaSpecOf, spawnBoss, updateBoss, updateRocks, type Boss, type Rock } from './bosses/index.js'
 import { crackedInBlast, fire, updateProjectiles, type Projectile } from './projectiles.js'
 import { hasUpgrade, UPGRADE_BIT, type UpgradeId } from './upgrades.js'
+import type { Cue } from './cues.js'
 
 const T = DISPLAY.TILE
 
@@ -116,7 +118,7 @@ export interface World {
    * Web Audio out of the replay path entirely — a headless replay raises the
    * same cues and simply has nobody listening.
    */
-  cues: string[]
+  cues: Cue[]
   /**
    * Reused array for the per-frame list of solid clams.
    *
@@ -316,6 +318,11 @@ export function update(w: World, input: InputFrame): void {
   for (const box of enemySolids(w.enemies, SOLID_SCRATCH_2)) w.solidScratch.push(box)
   const solids = w.solidScratch
 
+  // §10.3's magma rumble: a warning rather than an event, so it repeats on a
+  // slow beat for as long as the floor of the world is following you. Only
+  // magma — a flood has a visible surface and does not need telling.
+  if (w.frame % 150 === 0 && w.rises.some((r) => r.armed && r.fluid === 'magma')) w.cues.push('magma')
+
   const under = riseAt(w.rises, w.player)
   const ctx: PlayerStepContext = {
     map: w.map,
@@ -356,6 +363,14 @@ export function update(w: World, input: InputFrame): void {
   // dies rather than the one after.
   checkClams(w.clams, w.player)
   checkPressure(w.pressure, w.player)
+
+  // §7.6's heartbeat, quickening: the closer the crush is, the sooner the next
+  // beat. A warning the player can act on without looking away from the room.
+  const load = pressureLoad(w.pressure, w.player)
+  if (load > 0) {
+    const beat = Math.max(18, Math.round(48 - load * 36))
+    if (w.frame % beat === 0) w.cues.push('pressure')
+  }
 
   collectPickups(w)
   checkCheckpoints(w)

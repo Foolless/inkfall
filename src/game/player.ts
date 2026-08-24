@@ -1,4 +1,5 @@
 import { Act, isHeld, isPressed, type InputFrame } from '../engine/input.js'
+import type { Cue } from './cues.js'
 import {
   CHARGED_TIER,
   DISPLAY,
@@ -228,7 +229,7 @@ export interface PlayerStepContext {
   /** Solid boxes that are not terrain — closed clams, hook tops, snail shells. */
   solids?: readonly Box[]
   /** Named sounds this step wants. Filled, never played, by the simulation. */
-  cues?: string[]
+  cues?: Cue[]
   /**
    * A rising surface Nib is currently under, resolved by the world.
    *
@@ -398,7 +399,7 @@ function cling(ctx: PlayerStepContext, p: Player, dir: number, tier: (typeof TIE
     p.clingsUsed++
     p.clingDir = wall
     p.clingFrames = 0
-    ctx.cues?.push('cling')
+    ctx.cues?.push('clingGrip')
   }
 
   p.clingFrames++
@@ -419,6 +420,9 @@ function cling(ctx: PlayerStepContext, p: Player, dir: number, tier: (typeof TIE
 
   // Held, then sliding. The slide is the timer made visible: by the time the
   // player notices they are descending, they have had a second to decide.
+  // The frame the grip runs out gets a sound of its own: the slide is a timer
+  // made visible, and the moment it starts is the one worth hearing.
+  if (p.clingFrames === UPGRADES.CLING_FRAMES + 1) ctx.cues?.push('clingSlip')
   p.vy = p.clingFrames <= UPGRADES.CLING_FRAMES ? 0 : UPGRADES.CLING_SLIDE
   p.vx = wall * 0.5 // stay pressed against it through the sweep
   return true
@@ -490,7 +494,7 @@ function walk(p: Player, input: InputFrame, dir: number, tier: (typeof TIERS)[nu
   p.vx = approach(p.vx, dir * max, accel)
 }
 
-function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?: string[]): void {
+function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?: Cue[]): void {
   if (p.jumpBuffer > 0 && (p.grounded || p.coyote > 0)) {
     p.vy = tier.jump
     p.grounded = false
@@ -511,7 +515,7 @@ function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?:
   p.vy = Math.min(p.vy + tier.gravity, PHYSICS.TERMINAL_FALL)
 }
 
-function swim(p: Player, dir: number, cues?: string[]): void {
+function swim(p: Player, dir: number, cues?: Cue[]): void {
   if (p.jumpBuffer > 0) {
     p.vy = WATER.SWIM_STROKE
     p.jumpBuffer = 0

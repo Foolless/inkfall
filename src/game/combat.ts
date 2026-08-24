@@ -331,7 +331,9 @@ function payBossHit(w: CombatState, result: 'part' | 'hit', jumpHeld: boolean): 
     w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_SHRINK)
     if (w.boss?.state === 'dying') w.score += POINTS.BOSS
   }
-  w.cues.push('bossHit')
+  // The hit that ends a fight gets the longer sound. Five of these exist and
+  // each one is something the player will remember.
+  w.cues.push(w.boss?.state === 'dying' ? 'bossDeath' : 'bossHit')
 }
 
 export interface Approach {
@@ -382,6 +384,9 @@ function chargedKill(w: CombatState, e: Enemy): void {
   w.score += Math.max(POINTS.CHARGED_KILL, stompValue(w.chain))
   w.chain++
   w.hitstop = Math.max(w.hitstop, DISPLAY.HITSTOP_FRAMES)
+  // Not a stomp: nothing was landed on. §10.3 lists enemy death separately
+  // from stomp for exactly this reason — the two do not feel the same.
+  w.cues.push('enemyDeath')
 }
 
 function takeHit(w: CombatState, source: Box): void {

@@ -24,7 +24,7 @@ import {
 import { loadGhost, writeGhost } from './engine/ghosts.js'
 import { bindsFrom, OPTION_ROWS, rebind } from './game/options.js'
 import { idsOf, maskOf } from './game/upgrades.js'
-import { Audio, type Cue } from './engine/audio/sfx.js'
+import { Audio } from './engine/audio/sfx.js'
 import { trackFor } from './content/music/world1.js'
 import { chapterOf } from './content/chapters.js'
 
@@ -311,7 +311,7 @@ startLoop({
     }
 
     updateSession(session, input)
-    for (const cue of session.world.cues) audio.play(cue as Cue)
+    for (const cue of session.world.cues) audio.play(cue)
     if (session.screen !== screenBefore) audio.play('menu')
     if (session.pendingSave) {
       session.pendingSave = false
