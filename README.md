@@ -51,8 +51,8 @@ how v1 is built.
 ```bash
 npm install
 npm run dev       # World 1, at http://localhost:5173
-npm run verify    # typecheck + lint + 1,149 unit tests + build + bundle size
-npm run smoke     # 14 Playwright browser tests
+npm run verify    # typecheck + lint + 1,173 unit tests + build + bundle size
+npm run smoke     # 16 Playwright browser tests
 ```
 
 `npm run dev` also serves the sprite editor at `/tools/sprite-editor/` and the level editor
@@ -115,6 +115,16 @@ received. None of them crashed.
 
 Six of the eight were invisible to the existing tests, because those asserted what the code
 *stored* rather than what it *used*. Each fix came with an assertion of the second kind.
+
+Review of the finished branch turned up five more, all one variant of the same shape: **facts
+the game keeps in two places and updates in one**. Assist Mode lives on the run (lives) and on the world (enemy speed and
+soft checkpoints), and the options screen set one of them — so turning it on from a pause gave
+unlimited lives against classic-speed enemies. The game-over screen added up the run's score
+and the unfinished level's; the board entry took only the first. The completion screen timed
+the last level and labelled it the descent. A restart reset the level and left the ghost
+recorder running, splicing an abandoned attempt onto the run that replaced it. And
+`?level=w02-kelp` on a fresh save opened in a room whose first obstacle is a kelp knot only
+the Ink Shot cuts — the debug route the README recommends, landing you in a level with no exit.
 
 ## What Phase 3 found
 

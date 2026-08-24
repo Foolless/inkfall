@@ -303,17 +303,53 @@ export function runFramesNow(s: Session): number {
 }
 
 /**
- * Turn Assist Mode on or off, and rebuild the world so it takes effect.
+ * Put Assist Mode into effect everywhere it is read — the run *and* the live
+ * world.
  *
- * Only legal outside a level. A run is played at one difficulty: flipping it
- * mid-level would change what the input log means halfway through, and a clear
- * that was half assisted is not a fact the tally can state honestly.
+ * Both, always, because the two answer different questions every frame: the
+ * session decides whether a death costs a life, the world decides whether
+ * enemies are slowed and whether soft checkpoints land. Setting one and not
+ * the other produced a run with infinite lives at classic enemy speed, which
+ * is not a difficulty anybody chose.
+ *
+ * Assist is safe to flip on a world already in motion because nothing in the
+ * geometry is built from it: `createWorld` copies the flag and only ever reads
+ * it back live. So the options screen can offer it from a pause without having
+ * to throw the level away and restart it.
+ */
+export function applyAssist(s: Session, on: boolean): void {
+  s.assist = on
+  s.world.assist = on
+}
+
+/**
+ * The title screen's one-key Assist switch (PRD §13).
+ *
+ * Refuses anywhere but the title and game-over screens — not because assist
+ * cannot change mid-level (`applyAssist` handles that), but because `A` is
+ * also the WASD binding for Left, and the host uses this answer to decide
+ * whether the key was a toggle or a step. Mid-level, it is a step.
+ *
+ * Outside a level the world is rebuilt as well, which costs nothing there and
+ * picks up anything else that has changed since it was built.
  */
 export function setAssist(s: Session, on: boolean): boolean {
   if (s.screen !== 'title' && s.screen !== 'gameOver') return false
-  s.assist = on
+  applyAssist(s, on)
   s.world = rebuild(s, s.level, on)
   return true
+}
+
+/**
+ * Restart the current level from its beginning, as the R key does.
+ *
+ * Everything a fresh entry resets, resets — including the ghost recorder,
+ * which otherwise carries the abandoned attempt into the run that replaced it
+ * and stores the pair as one personal best.
+ */
+export function restartLevel(s: Session): void {
+  s.world = rebuild(s, s.level)
+  beginLevel(s)
 }
 
 /**
@@ -439,6 +475,12 @@ function startRun(s: Session): void {
 
 /** The run is over — cleared out or played out. Its score goes on the board. */
 function endRun(s: Session): void {
+  // Whatever was earned inside the level the run died in comes with it. The
+  // game-over screen has spent the last few seconds showing that total; a
+  // board entry that quietly dropped it would contradict the screen the player
+  // was looking at when they pressed the key.
+  s.score += s.world.score
+  s.world.score = 0
   s.screen = 'title'
   s.pendingScore = true
 }
@@ -462,6 +504,10 @@ function beginLevel(s: Session): void {
  */
 function useContinue(s: Session): void {
   s.continues--
+  // The world about to be thrown away is still holding everything the failed
+  // attempt earned. Banking it here is the same rule as `endRun`'s: a continue
+  // costs the shells and the checkpoint, never the points.
+  s.score += s.world.score
   s.world = rebuild(s, s.level)
   s.lives = RULES.START_LIVES
   beginLevel(s)

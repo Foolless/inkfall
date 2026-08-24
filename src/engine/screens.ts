@@ -302,7 +302,9 @@ export function drawGameClear(ctx: CanvasRenderingContext2D, s: Session, pearls:
   drawTextCentred(ctx, 'THE ABYSS IS BEHIND YOU', W / 2, 40, SHARED.INK_CYAN, { scale: 1 })
   drawTextCentred(ctx, `SCORE ${formatScore(s.score)}`, W / 2, 70, SHARED.UI_TEXT, { scale: 2 })
   drawTextCentred(ctx, `PEARLS ${pearls} OF 15`, W / 2, 96, SHARED.PEARL)
-  drawTextCentred(ctx, `TIME ${formatTime(s.levelFrames)}`, W / 2, 110, SHARED.UI_DIM)
+  // The whole descent, not the last level of it: `runFrames` is the sum of the
+  // level timers (§8.4) and the final level was added to it on the way in.
+  drawTextCentred(ctx, `TIME ${formatTime(s.runFrames)}`, W / 2, 110, SHARED.UI_DIM)
 
   // The true ending (§8.3): what the fifteen pearls were for. Four short lines,
   // because §11.3 gives the game almost no words and this is not the place to

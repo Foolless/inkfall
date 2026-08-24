@@ -363,6 +363,79 @@ test('the world map remembers how far you got, across a reload', async ({ page }
 })
 
 /**
+ * Assist Mode, changed from the pause screen, reaches the level already
+ * running.
+ *
+ * The setting lives in two places: the session decides whether a death costs a
+ * life, the world decides whether enemies are slowed. Options set only the
+ * first, so a paused player who turned assist on got unlimited lives against
+ * classic-speed enemies — a difficulty nobody chose, from a row that looked
+ * like it had worked.
+ */
+test('assist mode changed from the pause screen reaches the running level', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/?level=greybox')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await confirmUntil(page, 'playing')
+  await advance(page, 10)
+  expect(await page.evaluate(() => window.__inkfall!.assist())).toBe(false)
+
+  // Pause, up into Options, right on the first row — which is Assist Mode.
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'paused')
+  await page.keyboard.press('ArrowUp')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'options')
+  await page.keyboard.press('ArrowRight')
+  await page.waitForFunction(() => window.__inkfall!.assist())
+  expect(await page.evaluate(() => window.__inkfall!.worldAssist()), 'the world was left behind').toBe(true)
+
+  // Back into the same level — not a fresh one. The frame counter is the proof.
+  const frame = await page.evaluate(() => window.__inkfall!.frame())
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'paused')
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+  expect(await page.evaluate(() => window.__inkfall!.frame())).toBeGreaterThanOrEqual(frame)
+
+  // And turning it back off puts both halves back.
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'paused')
+  await page.keyboard.press('ArrowUp')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'options')
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForFunction(() => !window.__inkfall!.assist())
+  expect(await page.evaluate(() => window.__inkfall!.worldAssist())).toBe(false)
+
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/**
+ * The debug route lands in a level that can actually be finished.
+ *
+ * `?level=w02-kelp` on a fresh save started with an empty loadout, and World
+ * 2's first room is a kelp knot only the Ink Shot opens — a level with no exit,
+ * reachable by the URL the README tells people to use. Only a browser sees it:
+ * the loadout is composed at boot, out of the query string and the save.
+ */
+test('a level entered by URL starts with what the campaign would have given', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/?level=w02-kelp')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.upgrades())).toContain('inkShot')
+
+  // World 1 is the start of the campaign and is owed nothing.
+  await page.goto('/?level=w01-tidepools')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.upgrades())).toEqual([])
+
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/**
  * Options, driven from the keyboard: change a setting, rebind a key, and check
  * both survive a reload.
  *

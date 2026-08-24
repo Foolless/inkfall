@@ -4,9 +4,17 @@ import { DebugOverlay } from './engine/debug.js'
 import { DEFAULT_BINDS, Keyboard } from './engine/input.js'
 import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
-import { campaign, levelDef } from './content/levels/index.js'
+import { campaign, levelDef, loadoutOnArrival } from './content/levels/index.js'
 import { bossCameraLock } from './game/world.js'
-import { createSession, nextLevel, rebuild, setAssist, updateSession } from './game/state.js'
+import {
+  applyAssist,
+  createSession,
+  nextLevel,
+  rebuild,
+  restartLevel,
+  setAssist,
+  updateSession,
+} from './game/state.js'
 import type { LevelDef } from './content/levels/format.js'
 import { kill } from './game/player.js'
 import {
@@ -69,7 +77,12 @@ if (loaded.message) showToast(loaded.message)
 // Upgrades are permanent (§8.5), so a run starts with whatever the save says
 // this player has already earned — including on a second playthrough.
 const session = createSession(startLevel, {
-  upgrades: maskOf(save.progress.upgrades),
+  // Everything earned, plus everything a player reaching this level the normal
+  // way is guaranteed to be holding (§8.5's table, derived from the campaign
+  // order). Without the second half, `?level=w02-kelp` on a fresh save opens
+  // in a room whose first obstacle is a kelp knot only the Ink Shot cuts —
+  // the debug route landing a player in a level they cannot leave.
+  upgrades: maskOf(save.progress.upgrades) | maskOf(loadoutOnArrival(startLevel.id)),
   assist: save.settings.assistMode,
   // Read live rather than snapshotted: the save is replaced on every clear,
   // and a pearl banked in World 2 must be known by the time World 2 is
@@ -279,7 +292,11 @@ function stepOptions(e: KeyboardEvent): boolean {
  */
 function applySettings(next: SaveData['settings']): void {
   save = { ...save, settings: next }
-  session.assist = next.assistMode
+  // Both halves of Assist Mode, or neither. Setting only the session's flag
+  // handed a paused player unlimited lives while the enemies around them
+  // stayed at classic speed — a difficulty nobody picked, from a menu row that
+  // looked like it had worked.
+  applyAssist(session, next.assistMode)
   session.timerDisplay = next.timerDisplay
   keyboard.setBinds(bindsFrom(next, DEFAULT_BINDS))
   audio.configure({ musicVolume: next.musicVolume, sfxVolume: next.sfxVolume })
@@ -303,9 +320,10 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyR' && session.screen === 'playing') {
     e.preventDefault()
-    session.world = rebuild(session, session.level)
-    session.levelFrames = 0
-    session.deathsCharged = session.world.player.deaths
+    // Through the session rather than by hand: a restart has to reset the
+    // clock, the tally flags and the ghost recorder, and the hand-rolled
+    // version here reset the first of those and left a recording running.
+    restartLevel(session)
   }
   // Assist Mode is a title-screen switch and a saved setting (PRD §13). On one
   // key, next to the label that names it, because the player who needs it is
@@ -455,6 +473,7 @@ declare global {
       level: () => string
       upgrades: () => string[]
       assist: () => boolean
+      worldAssist: () => boolean
       setAssist: (on: boolean) => boolean
       optionRows: () => string[]
       listening: () => string | null
@@ -499,6 +518,9 @@ window.__inkfall = {
   level: () => session.level.id,
   upgrades: () => idsOf(session.upgrades),
   assist: () => session.assist,
+  // Assist lives in two places — the run's lives and the world's enemies — and
+  // the pair is the thing worth being able to look at from a test.
+  worldAssist: () => session.world.assist,
   setAssist: (on: boolean) => setAssist(session, on),
   optionRows: () => OPTION_ROWS.map((r) => r.id),
   listening: () => session.options.listening,
