@@ -261,6 +261,44 @@ test('the level editor reports what is wrong instead of accepting it', async ({ 
   expect(await page.evaluate(() => window.__editor!.status())).toContain('ragged')
 })
 
+/**
+ * Assist Mode, driven exactly as a player reaches it: one key on the title.
+ *
+ * The unit tests prove the *rules* — lives do not go down, enemies are slower.
+ * This proves the switch is reachable without a console, that the setting
+ * survives a reload, and that a death in an assist run does not end it. Gate 3
+ * failed on that last point, so it gets a browser test rather than trust.
+ */
+test('assist mode is one key on the title, and it survives a reload', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/?level=greybox')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.assist())).toBe(false)
+
+  await page.keyboard.press('KeyA')
+  await page.waitForFunction(() => window.__inkfall!.assist())
+
+  const stored = await page.evaluate(() => window.localStorage.getItem('inkfall.save.v1'))
+  expect(JSON.parse(stored!).settings.assistMode).toBe(true)
+
+  // Into a level, and die more times than a classic run has lives.
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+  for (let i = 0; i < 5; i++) {
+    await page.evaluate(() => window.__inkfall!.kill())
+    await page.waitForTimeout(120)
+  }
+  expect(await page.evaluate(() => window.__inkfall!.screen())).toBe('playing')
+  expect(await page.evaluate(() => window.__inkfall!.lives())).toBe(3)
+
+  await page.reload()
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  expect(await page.evaluate(() => window.__inkfall!.assist())).toBe(true)
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
 test('the sprite editor loads', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))

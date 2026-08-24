@@ -15,6 +15,7 @@ import {
 import { POINTS } from '../src/game/score.js'
 import { kill } from '../src/game/player.js'
 import { glyph, MISSING } from '../src/content/font.js'
+import { campaign } from '../src/content/levels/index.js'
 import { levelFrom } from './helpers.js'
 
 const LEVEL = levelFrom(['S........E', '##########'], 'flow')
@@ -294,6 +295,12 @@ describe('the font', () => {
       '[X] INK DASH',
       '[C] INK SHOT',
       'NIBx3',
+      'NIBx∞',
+      'A: ASSIST ON   INFINITE LIVES',
+      'A: ASSIST OFF',
+      'ASSIST',
+      'THE ABYSS IS BEHIND YOU',
+      'SOMETHING IS STILL DOWN THERE',
       'S000',
       '1,234,567',
       '10:05',
@@ -301,6 +308,22 @@ describe('the font', () => {
     ].join('')
     for (const ch of new Set(shown)) {
       expect(glyph(ch), `no glyph for ${JSON.stringify(ch)}`).not.toBe(MISSING)
+    }
+  })
+
+  /**
+   * The list above is hand-written and a hand-written list goes stale. Hints
+   * come from level data, and that is where the hole actually was: World 1's
+   * `HOLD ↑ + X TO DASH UP` — Gate 1's entire fix for nobody finding the
+   * up-dash — drew the arrow as a missing-character box for two phases.
+   */
+  test('every hint in every shipped level is drawable, arrows included', () => {
+    for (const def of campaign()) {
+      for (const hint of def.hints ?? []) {
+        for (const ch of new Set(hint.text)) {
+          expect(glyph(ch), `${def.id} hint has no glyph for ${JSON.stringify(ch)}`).not.toBe(MISSING)
+        }
+      }
     }
   })
 

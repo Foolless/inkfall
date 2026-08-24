@@ -45,6 +45,16 @@ export function drawTitle(ctx: CanvasRenderingContext2D, s: Session): void {
 
   if (pulse(s.uiFrames)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, 116, SHARED.UI_TEXT)
 
+  // Assist Mode is plainly labelled and never hidden in a submenu (PRD §13):
+  // the person who needs it is the least likely to go looking.
+  drawTextCentred(
+    ctx,
+    s.assist ? 'A: ASSIST ON   INFINITE LIVES' : 'A: ASSIST OFF',
+    W / 2,
+    132,
+    s.assist ? SHARED.INK_CYAN : SHARED.UI_DIM,
+  )
+
   drawTextCentred(ctx, 'ARROWS MOVE   SPACE JUMP   X INK DASH', W / 2, 148, SHARED.UI_DIM)
   drawTextCentred(ctx, 'SHIFT RUN   ESC PAUSE   M MUTE', W / 2, 158, SHARED.UI_DIM)
 }
@@ -116,6 +126,9 @@ export function drawGameClear(ctx: CanvasRenderingContext2D, s: Session, pearls:
   drawTextCentred(ctx, `TIME ${formatTime(s.levelFrames)}`, W / 2, 110, SHARED.UI_DIM)
 
   if (pearls < 15) drawTextCentred(ctx, 'SOMETHING IS STILL DOWN THERE', W / 2, 132, SHARED.UI_DIM)
+  // §13: an assist run is stamped, never blocked. It says what the run was, in
+  // the same breath as saying it was finished, and it is not an asterisk.
+  if (s.assist) drawTextCentred(ctx, 'ASSIST', W / 2, 122, SHARED.UI_DIM)
   if (pulse(s.uiFrames)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, H - 16, SHARED.UI_TEXT)
 }
 

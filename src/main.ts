@@ -6,7 +6,7 @@ import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
 import { campaign, levelDef } from './content/levels/index.js'
 import { bossCameraLock } from './game/world.js'
-import { createSession, nextLevel, updateSession } from './game/state.js'
+import { createSession, nextLevel, setAssist, updateSession } from './game/state.js'
 import type { LevelDef } from './content/levels/format.js'
 import { kill } from './game/player.js'
 import {
@@ -51,7 +51,10 @@ if (loaded.message) showToast(loaded.message)
 
 // Upgrades are permanent (§8.5), so a run starts with whatever the save says
 // this player has already earned — including on a second playthrough.
-const session = createSession(startLevel, { upgrades: maskOf(save.progress.upgrades) })
+const session = createSession(startLevel, {
+  upgrades: maskOf(save.progress.upgrades),
+  assist: save.settings.assistMode,
+})
 const audio = new Audio()
 
 /**
@@ -127,9 +130,19 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyR' && session.screen === 'playing') {
     e.preventDefault()
-    session.world = createSession(session.level, { upgrades: session.upgrades }).world
+    session.world = createSession(session.level, { upgrades: session.upgrades, assist: session.assist }).world
     session.levelFrames = 0
     session.deathsCharged = session.world.player.deaths
+  }
+  // Assist Mode is a title-screen switch and a saved setting (PRD §13). On one
+  // key, next to the label that names it, because the player who needs it is
+  // the least likely to go hunting through a menu for it.
+  if (e.code === 'KeyA') {
+    e.preventDefault()
+    if (!setAssist(session, !session.assist)) return
+    if (!canWrite) return
+    save = { ...save, settings: { ...save.settings, assistMode: session.assist } }
+    writeSave(window.localStorage, save)
   }
 })
 
@@ -187,6 +200,8 @@ declare global {
       pearls: () => number
       level: () => string
       upgrades: () => string[]
+      assist: () => boolean
+      setAssist: (on: boolean) => boolean
       reset: () => void
       kill: () => void
       clear: () => void
@@ -203,7 +218,7 @@ window.__inkfall = {
   lives: () => session.lives,
   score: () => session.score + session.world.score,
   reset: () => {
-    session.world = createSession(session.level, { upgrades: session.upgrades }).world
+    session.world = createSession(session.level, { upgrades: session.upgrades, assist: session.assist }).world
     session.deathsCharged = 0
   },
   kill: () => {
@@ -224,5 +239,7 @@ window.__inkfall = {
   pearls: () => save.progress.pearls[session.level.id]?.filter(Boolean).length ?? 0,
   level: () => session.level.id,
   upgrades: () => idsOf(session.upgrades),
+  assist: () => session.assist,
+  setAssist: (on: boolean) => setAssist(session, on),
   audio: () => ({ started: audio.started, playing: audio.nowPlaying, muted: audio.muted }),
 }

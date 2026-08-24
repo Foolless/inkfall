@@ -62,6 +62,14 @@ export interface Session {
    */
   granted: UpgradeId[]
   /**
+   * Assist Mode (PRD §13). Lives never run out and there is no game over.
+   *
+   * On the session as well as the world because the two halves of the mode live
+   * in different places: the world owns the slower enemies and the soft
+   * checkpoints, and the run owns the life counter that stops going down.
+   */
+  assist: boolean
+  /**
    * Frames since the session began, ticking on every screen.
    *
    * Menus need a clock and the world's does not run on the title, so this is
@@ -85,14 +93,17 @@ export const DEFAULT_PAR_SECONDS = 300
 export interface SessionOptions {
   /** What the player already holds, from their save. */
   upgrades?: number
+  /** Assist Mode, from their settings. PRD §13. */
+  assist?: boolean
 }
 
 export function createSession(level: LevelDef, options: SessionOptions = {}): Session {
   const upgrades = options.upgrades ?? 0
+  const assist = options.assist ?? false
   return {
     screen: 'title',
     level,
-    world: createWorld(level, { upgrades }),
+    world: createWorld(level, { upgrades, assist }),
     lives: RULES.START_LIVES,
     continues: RULES.CONTINUES,
     score: 0,
@@ -105,9 +116,24 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
     noDeath: true,
     upgrades,
     granted: [],
+    assist,
     uiFrames: 0,
     pendingSave: false,
   }
+}
+
+/**
+ * Turn Assist Mode on or off, and rebuild the world so it takes effect.
+ *
+ * Only legal outside a level. A run is played at one difficulty: flipping it
+ * mid-level would change what the input log means halfway through, and a clear
+ * that was half assisted is not a fact the tally can state honestly.
+ */
+export function setAssist(s: Session, on: boolean): boolean {
+  if (s.screen !== 'title' && s.screen !== 'gameOver') return false
+  s.assist = on
+  s.world = createWorld(s.level, { upgrades: s.upgrades, assist: on })
+  return true
 }
 
 /** Confirm is Space or Z; Esc and Enter pause. Both confirm on a menu. */
@@ -147,7 +173,7 @@ export function updateSession(s: Session, input: InputFrame): void {
 }
 
 function startRun(s: Session): void {
-  s.world = createWorld(s.level, { upgrades: s.upgrades })
+  s.world = createWorld(s.level, { upgrades: s.upgrades, assist: s.assist })
   s.lives = RULES.START_LIVES
   s.continues = RULES.CONTINUES
   s.score = 0
@@ -172,7 +198,7 @@ function beginLevel(s: Session): void {
  */
 function useContinue(s: Session): void {
   s.continues--
-  s.world = createWorld(s.level, { upgrades: s.upgrades })
+  s.world = createWorld(s.level, { upgrades: s.upgrades, assist: s.assist })
   s.lives = RULES.START_LIVES
   beginLevel(s)
   s.screen = 'playing'
@@ -222,10 +248,13 @@ function chargeDeaths(s: Session): void {
   const deaths = s.world.player.deaths
   while (s.deathsCharged < deaths) {
     s.deathsCharged++
-    s.lives--
+    // Assist Mode does not charge the life, but it still records the death.
+    // The counter is what the run costs; the death is what happened, and the
+    // no-death bonus has to stay honest or the tally is a different game's.
+    if (!s.assist) s.lives--
     s.noDeath = false
   }
-  if (s.lives <= 0) s.screen = 'gameOver'
+  if (!s.assist && s.lives <= 0) s.screen = 'gameOver'
 }
 
 function clearLevel(s: Session): void {
@@ -294,7 +323,7 @@ function finishLevel(s: Session): void {
   }
 
   s.level = next
-  s.world = createWorld(next, { upgrades: s.upgrades })
+  s.world = createWorld(next, { upgrades: s.upgrades, assist: s.assist })
   beginLevel(s)
   s.screen = 'playing'
 }

@@ -666,7 +666,9 @@ export class Renderer {
     ctx.fillStyle = 'rgba(5,9,15,0.55)'
     ctx.fillRect(0, 0, DISPLAY.WIDTH, 16)
 
-    drawText(ctx, `NIBx${s.lives}`, 4, 5, SHARED.UI_TEXT)
+    // Assist Mode never spends a life, so the counter would sit at 3 forever
+    // and read as a broken HUD. It says what is actually true instead.
+    drawText(ctx, s.assist ? 'NIBx∞' : `NIBx${s.lives}`, 4, 5, SHARED.UI_TEXT)
 
     for (let i = 0; i < 3; i++) {
       const x = 46 + i * 10

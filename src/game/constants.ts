@@ -160,6 +160,39 @@ export const RULES = {
 } as const
 
 /**
+ * Assist Mode. PRD §13, brought forward from checkpoint 4.7.
+ *
+ * The game is deliberately hard; §13 draws the line at *inaccessible*. Gate 3
+ * found the honest version of that problem — the person who commissioned the
+ * game could not finish it — so this is the valve the PRD always specified,
+ * built early because a game nobody can complete cannot be play-tested.
+ *
+ * Three provisions, and each is a number rather than a special case somewhere:
+ *
+ *   - **Lives never run out.** Stronger than §13's "infinite continues",
+ *     because a continue still costs the run its shells and drops the player
+ *     back to the title on the way. What stops a beginner is not the third
+ *     death, it is being sent to the start of the world for it.
+ *   - **Enemies move at three quarters speed.** Implemented as a skipped step
+ *     rather than as scaled speeds: every species is a pure function of its own
+ *     clock, so holding the clock slows the patrol, the sine, the fire cycle
+ *     and the lunge together, and no species has to know this mode exists.
+ *   - **A soft checkpoint every 32 tiles of new ground.** §7.1 spaces conches
+ *     about 70 tiles apart, so this roughly halves the distance a mistake costs
+ *     — §13's "checkpoint density doubled" without editing five levels.
+ *
+ * None of it touches the tier system, the ink budget, or what kills. An assist
+ * run is the same game with a shorter walk back, which is why its clears are
+ * stamped rather than blocked.
+ */
+export const ASSIST = {
+  /** Enemies and bosses hold still on 1 frame in every 4. */
+  ENEMY_HOLD_EVERY: 4,
+  /** Tiles of forward progress that earn a soft checkpoint between conches. */
+  CHECKPOINT_TILES: 32,
+} as const
+
+/**
  * The roster. PRD §6.1 — twelve enemies, one lesson each.
  *
  * Speeds are pixels per frame; distances in this block are **tiles**, because

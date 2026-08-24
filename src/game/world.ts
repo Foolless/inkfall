@@ -1,5 +1,5 @@
 import { Act, isHeld, isPressed, type InputFrame } from '../engine/input.js'
-import { CHARGED_TIER, DISPLAY, ENEMIES, FULL, RULES, UPGRADES, type TierIndex } from './constants.js'
+import { ASSIST, CHARGED_TIER, DISPLAY, ENEMIES, FULL, RULES, UPGRADES, type TierIndex } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
 import { Tile, tileAt, type TileMap } from './tilemap.js'
 import { loadLevel, type HintDef, type LevelDef, type LoadedLevel } from '../content/levels/format.js'
@@ -81,6 +81,8 @@ export interface World {
   spawn: { x: number; y: number }
   checkpoint: { x: number; y: number } | null
   exit: Box | null
+  /** Assist Mode is on for this world. See ASSIST in constants.ts. */
+  assist: boolean
   frame: number
   cleared: boolean
   respawnTimer: number
@@ -131,6 +133,14 @@ export interface World {
 export interface WorldOptions {
   /** Permanent upgrades, as a bitmask. See game/upgrades.ts. */
   upgrades?: number
+  /**
+   * Assist Mode (PRD §13). Slows enemies and hands out soft checkpoints.
+   *
+   * An option on the world rather than a global, so it is part of what a replay
+   * is replayed *with* — the same input log against an assist world and a
+   * classic one are two different runs, and both are deterministic.
+   */
+  assist?: boolean
 }
 
 export interface Hint extends HintDef {
@@ -219,6 +229,7 @@ export function createWorld(source: LevelDef | LoadedLevel, options: WorldOption
     spawn,
     checkpoint: null,
     exit: level.exit ? { x: level.exit.x * T, y: level.exit.y * T, w: T, h: T } : null,
+    assist: options.assist ?? false,
     hints: (level.def.hints ?? []).map((h) => ({ ...h, radius: h.radius ?? 5, frames: 0, spent: false })),
     frame: 0,
     cleared: false,
@@ -320,7 +331,7 @@ export function update(w: World, input: InputFrame): void {
     },
     spawn: (kind: EnemyKind, x: number, y: number) => spawnFromVent(w, kind, x, y),
   }
-  for (const e of w.enemies) updateEnemy(enemyCtx, e)
+  if (!held(w)) for (const e of w.enemies) updateEnemy(enemyCtx, e)
 
   breakKnots(w)
   updateProjectiles(w.map, w.projectiles, w.collapsed)
@@ -337,6 +348,7 @@ export function update(w: World, input: InputFrame): void {
 
   collectPickups(w)
   checkCheckpoints(w)
+  checkAssistCheckpoint(w)
   tickHints(w)
 
   // The exit only counts once the King is finished. A level with a boss ends
@@ -376,6 +388,10 @@ function stepBoss(w: World, input: InputFrame): void {
 
   const boss = w.boss
   if (!boss || boss.state === 'dead') return
+  // A boss is an enemy, and it is the wall a beginner actually hits. Held on
+  // the same frames as the roster, after the rocks so anything already thrown
+  // keeps travelling.
+  if (held(w)) return
   updateBoss(
     {
       map: w.map,
@@ -608,6 +624,52 @@ function tickHints(w: World): void {
       Math.abs(cx - (hint.tx * T + T / 2)) <= hint.radius * T && Math.abs(cy - (hint.ty * T + T / 2)) <= hint.radius * T
     if (near) hint.frames = HINT_FRAMES
   }
+}
+
+/**
+ * Assist Mode's quarter-speed enemies: is this a frame they hold still on?
+ *
+ * A skipped step rather than scaled speeds. Every species is a pure function of
+ * its own clock, so holding the clock slows the patrol, the sine, the fire
+ * cycle and the lunge by the same 25% at once — and no species, and no boss,
+ * has to know the mode exists. Projectiles already in the air are not held:
+ * a barb that has been fired is the player's problem either way, and freezing
+ * it mid-flight would look like a bug rather than a mercy.
+ */
+function held(w: World): boolean {
+  return w.assist && w.frame % ASSIST.ENEMY_HOLD_EVERY === 0
+}
+
+/**
+ * Assist Mode's soft checkpoints — §13's "checkpoint density doubled", without
+ * editing five levels.
+ *
+ * Set at Nib's feet once he is 32 tiles past the last one, which roughly halves
+ * §7.1's ~70-tile conch spacing. Three guards, and each one is a respawn loop
+ * that would otherwise be possible:
+ *
+ *   - **Standing still on real ground.** Not mid-jump, not on a crumbling tile
+ *     that will not be there on the way back, and not on a Hookline — the
+ *     footing has to outlive the death that sends him to it.
+ *   - **Forward only.** Backtracking for a pearl must never move the checkpoint
+ *     behind the room the player is actually in.
+ *   - **Never inside the arena.** A boss is authored to start from its door.
+ */
+function checkAssistCheckpoint(w: World): void {
+  if (!w.assist) return
+  const p = w.player
+  if (!p.alive || !p.grounded || p.vy !== 0) return
+  if (w.arena && p.x + p.w > w.arena.x) return
+
+  const at = w.checkpoint ?? w.spawn
+  if (p.x - at.x < ASSIST.CHECKPOINT_TILES * T) return
+
+  // The tile he is standing on has to still be there after he dies on it.
+  const below = tileAt(w.map, Math.floor((p.x + p.w / 2) / T), Math.floor((p.y + p.h) / T))
+  if (below !== Tile.SOLID && below !== Tile.ONEWAY) return
+
+  w.checkpoint = { x: p.x, y: p.y }
+  w.cues.push('checkpoint')
 }
 
 function checkCheckpoints(w: World): void {
