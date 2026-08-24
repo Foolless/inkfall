@@ -17,6 +17,7 @@ export default defineConfig({
       input: {
         main: here('index.html'),
         spriteEditor: here('tools/sprite-editor/index.html'),
+        levelEditor: here('tools/level-editor/index.html'),
       },
     },
   },

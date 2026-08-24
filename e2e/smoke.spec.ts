@@ -187,6 +187,69 @@ test('audio stays silent until a gesture, then plays the chapter theme', async (
   expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
 })
 
+/**
+ * The level editor's round trip, driven in a real browser.
+ *
+ * The unit tests prove the *format* round-trips; this proves the tool wired to
+ * it does — that painting a tile changes exactly one character of the source
+ * and nothing else, which is the property that makes it safe to use on a level
+ * somebody already built.
+ */
+test('the level editor round-trips a level and paints exactly what it says', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/tools/level-editor/index.html')
+  await page.waitForFunction(() => window.__editor !== undefined)
+  await expect(page.locator('canvas#grid')).toBeVisible()
+
+  const original = [
+    "export const fixture: LevelDef = {",
+    "  id: 'fixture',",
+    "  name: 'Fixture',",
+    "  chapter: 'test',",
+    "  order: 0,",
+    "  tiles: [",
+    "    'S.........',",
+    "    '..........',",
+    "    '##########',",
+    "  ],",
+    "  entities: [",
+    "    { type: 'snapper', x: 4, y: 1, patrol: [2, 7] },",
+    "  ],",
+    "}",
+    "",
+  ].join('\n')
+
+  // In and straight back out again: what the tool writes is what it read.
+  await page.evaluate((src) => window.__editor!.load(src), original)
+  expect(await page.evaluate(() => window.__editor!.source())).toBe(original)
+
+  // One tile painted changes one character, and the entity list is untouched.
+  await page.evaluate(() => window.__editor!.paint(3, 1, '#'))
+  const painted = await page.evaluate(() => window.__editor!.source())
+  expect(painted).toContain("'...#......',")
+  expect(painted).toContain("{ type: 'snapper', x: 4, y: 1, patrol: [2, 7] }")
+
+  // And a placed entity lands in the list rather than in the grid.
+  await page.evaluate(() => window.__editor!.place('pearl', 8, 1))
+  const withPearl = await page.evaluate(() => window.__editor!.source())
+  expect(withPearl).toContain("{ type: 'pearl', x: 8, y: 1, id: 0 }")
+  expect(withPearl).toContain("'...#......',")
+
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/** A grid the game would refuse must be refused here, under the grid. */
+test('the level editor reports what is wrong instead of accepting it', async ({ page }) => {
+  await page.goto('/tools/level-editor/index.html')
+  await page.waitForFunction(() => window.__editor !== undefined)
+
+  const ragged = "{ id: 'bad', name: 'Bad', chapter: 'test', order: 0, tiles: ['S..', '##'] }"
+  await page.evaluate((src) => window.__editor!.load(src), ragged)
+  expect(await page.evaluate(() => window.__editor!.status())).toContain('ragged')
+})
+
 test('the sprite editor loads', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
