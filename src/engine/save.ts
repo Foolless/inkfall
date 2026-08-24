@@ -26,6 +26,12 @@ export const CURRENT_VERSION = 1
 export interface StorageLike {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
+  /**
+   * Optional: only the ghost store removes anything, and the save itself never
+   * does. A blob we cannot read is copied to `.bak` and left exactly where it
+   * was — deleting somebody's progress is not a recovery strategy.
+   */
+  removeItem?(key: string): void
 }
 
 export interface Progress {
@@ -62,6 +68,14 @@ export interface Settings {
   musicVolume: number
   sfxVolume: number
   assistMode: boolean
+  /**
+   * World 5's light radius in tiles. §13 offers 5 / 7 / 10.
+   *
+   * A setting rather than a chapter property, unlike `Chapter.dark` — the
+   * chapter says the world *is* dark, and this says how much of it one
+   * particular player needs to be able to see.
+   */
+  lightRadius: number
 }
 
 export interface SaveData {
@@ -87,6 +101,7 @@ export function defaultSave(): SaveData {
       musicVolume: 0.7,
       sfxVolume: 0.9,
       assistMode: false,
+      lightRadius: 5,
     },
   }
 }
@@ -331,10 +346,64 @@ export function recordClear(
   }
 }
 
+/**
+ * Bank permanent upgrades. PRD §8.5: they are kept, never lost.
+ *
+ * Additive and idempotent. Nothing in the game takes an upgrade away, so this
+ * only ever grows the list — a run that skips a level cannot un-grant what an
+ * earlier run earned.
+ */
+export function recordUpgrades(data: SaveData, ids: readonly string[]): SaveData {
+  const upgrades = [...data.progress.upgrades]
+  for (const id of ids) if (!upgrades.includes(id)) upgrades.push(id)
+  if (upgrades.length === data.progress.upgrades.length) return data
+  return { ...data, progress: { ...data.progress, upgrades } }
+}
+
+/**
+ * Unlock a level. Clearing one opens the next, and unlocking is permanent.
+ *
+ * Kept separate from `recordClear` because they answer different questions —
+ * "have I finished this" and "may I start this" — and Phase 4's world map
+ * reads the second without caring about the first.
+ */
+export function recordUnlock(data: SaveData, levelId: string): SaveData {
+  if (data.progress.unlocked.includes(levelId)) return data
+  return { ...data, progress: { ...data.progress, unlocked: [...data.progress.unlocked, levelId] } }
+}
+
 /** Top ten, highest first. Ties keep the earlier entry, which arrived first. */
 export function recordHighScore(data: SaveData, entry: HighScore): SaveData {
   const highScores = [...data.records.highScores, entry].sort((a, b) => b.score - a.score).slice(0, 10)
   return { ...data, records: { ...data.records, highScores } }
+}
+
+/** Every pearl in the game. Five levels of three (§8.3). */
+export const PEARLS_TOTAL = 15
+
+/**
+ * What collecting everything is worth. PRD §8.3.
+ *
+ * All fifteen pearls unlocks **Octo** and the true ending. Octo's *movement* is
+ * §8.6's post-1.0 work and is deliberately not built here — but the unlock is
+ * recorded now, because the alternative is asking players who finished the
+ * collection in v1 to do it again later. A flag costs nothing; a second
+ * playthrough costs an evening.
+ *
+ * Idempotent, like every other writer here: called on every clear, changes the
+ * save at most once.
+ */
+export function checkUnlocks(data: SaveData): SaveData {
+  if (totalPearls(data) < PEARLS_TOTAL) return data
+  const unlocked = data.characters.unlocked.includes('octo')
+    ? data.characters.unlocked
+    : [...data.characters.unlocked, 'octo']
+  if (unlocked === data.characters.unlocked && data.progress.trueEndingSeen) return data
+  return {
+    ...data,
+    characters: { ...data.characters, unlocked },
+    progress: { ...data.progress, trueEndingSeen: true },
+  }
 }
 
 export function pearlsFound(data: SaveData, levelId: string): number {

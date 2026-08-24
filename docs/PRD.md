@@ -4,10 +4,10 @@
 **Genre:** 2D side-scrolling action platformer
 **Player character:** Nib, a squid
 **Scope:** 5 levels, one boss each
-**Status:** Draft v1.4 — Phase 2 built. Gate 1 round one fed back into the dash's discoverability; World 1 is authored, and §16 opens the one-tile-gap problem
+**Status:** Draft v1.7 — Phase 4 built; the game is feature-complete. Previously: v1.6 — Phase 3 built and Gate 3 run once. All five worlds are authored and the game is completable start to finish, but a person could not finish it, so **Assist Mode is built** (§13.1, pulled forward from 4.7). Checkpoint 2.7's judgement call is answered: the soundtrack falls back to **five tracks** (§10.2). §16's one-tile-gap question stays resolved
 **Scope:** v1 ships **5 levels**. The architecture must not foreclose ~50 (§12.7).
 **Owner:** richard.andrew.young@gmail.com
-**Last updated:** 2026-08-23
+**Last updated:** 2026-08-24
 
 ---
 
@@ -191,7 +191,7 @@ Only these values change across the three tiers. Everything not listed — accel
 
 | Constant | Spent | **Full** *(baseline)* | Charged | Note |
 |---|---|---|---|---|
-| Sprite / hitbox | 12×12 / **10×10** | 16×16 / 12×14 | 16×16 / 12×14 | Only Spent fits a 1-tile gap |
+| Sprite / hitbox | 12×12 / **10×10** | 16×16 / 12×14 | 16×16 / 12×14 | ~~Only Spent fits a 1-tile gap~~ — not true at 16 px tiles; see §16 |
 | `INK_MAX` | **2** | 3 | 3 | Charged adds no pips — that's Deep Jet's job (§8.5) |
 | `GRAVITY` | **0.40** | 0.42 | 0.42 | |
 | `JUMP_IMPULSE` | **−6.80** | −6.60 | −6.60 | Small is not strictly worse |
@@ -254,7 +254,7 @@ An Ink Core collected while Spent promotes only one tier, to Full — you cannot
 
 **What ignores tiers entirely.** Pits, crushing, magma, Hookline contact, urchin spikes, and the World 5 pressure crush are **instant death at any size**, exactly as in Mario. Enemy contact and enemy projectiles cost a tier. This split is what keeps the world's hazards readable: geometry kills, creatures cost.
 
-**Being small is not purely worse.** Spent Nib fits through **1-tile gaps** that Full Nib cannot, jumps marginally higher, and sits on collapsing sand 50% longer. Levels use this for optional shortcuts, one pearl (§7.6), and speedrun routing — a runner may choose to stay Spent through a section.
+**Being small is not purely worse.** Spent Nib jumps marginally higher and sits on collapsing sand 50% longer, so a runner may choose to stay Spent through a section. *v1.5:* the third advantage this paragraph used to claim — fitting through **1-tile gaps** Full Nib cannot — does not exist at 16 px tiles, and is struck for v1 (§16, question 7). The tier difference is the pip budget, the jump and the sand.
 
 No fall damage — there is no killing height. **Invulnerability after respawn:** 60 frames.
 
@@ -371,7 +371,9 @@ Five levels, one per world. Target **3–5 minutes** each for a clean run, **8�
 
 Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go left), one requiring a hard optional route, one **requiring an upgrade from a later world** (see §8.5).
 
-**Pickups and small-only passages.** Every level places 4–6 Ink Bulbs (§4.4), at least one shortly after each checkpoint and at least one hidden, plus **1–2 Ink Cores** from World 3 onward (hidden-only in Worlds 1–2). Every level also contains **1–2 one-tile passages that only Spent Nib fits through** — optional shortcuts and speedrun routes, never mandatory, with exactly one pearl behind one in the whole game (W5 ②). A player who never gets hit never needs them; a player who does gets handed a small consolation.
+**Pickups.** Every level places 4–6 Ink Bulbs (§4.4), at least one shortly after each checkpoint and at least one hidden, plus **1–2 Ink Cores** from World 3 onward (hidden-only in Worlds 1–2).
+
+~~**Small-only passages.** Every level also contains 1–2 one-tile passages that only Spent Nib fits through — optional shortcuts and speedrun routes, never mandatory, with exactly one pearl behind one in the whole game (W5 ②).~~ **Struck for v1** (§16, question 7): both tiers fit a one-tile opening at 16 px, so there is no geometry behind the idea. No level ships one, and W5 ② moved behind cracked crust. The consolation for taking a hit is the jump and the sand, not a route.
 
 **Where Ink Cores go.** Never immediately before a boss door — a Charged run at a boss trivialises a fight built around a 30-frame window. They go **before a long gauntlet section**, so the reward is spent on traversal and crowds rather than on the encounter the level was built to test.
 
@@ -428,7 +430,7 @@ Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go l
 
 | Beat | Content |
 |---|---|
-| A1 | The hull breach. Cling taught on a single wall with no threat. 60 frames of grip, then you slide. |
+| A1 | The hull breach. Cling taught in a **four-tile chimney** with no threat — grip, push off, grip the facing wall. 60 frames of grip, then you slide. *(v1.5: was a single wall. One wall teaches the grip but not the push-off, and the push-off is the half that makes Cling a way to travel rather than a place to wait.)* |
 | A2 | Cargo hold: a shaft of stacked crates, cling-and-dash upward. |
 | B1 | First Ghost Diver. It comes through the wall. There is no fight — the room's exit is 8 tiles away and it takes exactly long enough to be terrifying. |
 | B2 | Deck: three Hooklines sweeping. Ride the flat tops across a 20-tile gap. |
@@ -458,7 +460,9 @@ Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go l
 | C3 | Second magma rise, this one with Eels in the walls and two mandatory Ink Bomb walls. Fastest ascent in the game. |
 | BOSS | The Vent Lord. |
 
-**Pearls:** ① off the side of the B1 climb — costs you ~3 seconds of magma lead. ② inside a Snail's shell, requiring you to kill one in a specific spot. ③ under a permanent magma pool at the bottom of C1 — **requires Heat Shell (W4, earned on this level's completion)**, so this is the first pearl a player is likely to realise they must come *back* for.
+**Pearls**, in the id order the level uses — ids run left to right along a level and are save-file keys, so they are stable forever (§12.7): ① off the side of the B1 climb, costing ~3 seconds of magma lead. ② under a permanent magma pool at the end of C1 — **requires Heat Shell (W4, earned on this level's completion)**, so this is the first pearl a player is likely to realise they must come *back* for. ③ behind cracked crust an Ink Bomb opens, in the C2 corridor.
+
+*v1.6: ② and ③ are the other way round from v1.4's listing. The magma pool is physically earlier in the level than the C2 corridor, and ids follow position. ③ was also "inside a Snail's shell" until v1.5 — a pearl that only exists when a specific enemy dies in a specific place needs a drop system the game does not have.*
 
 ### 7.6 Level 5 — The Abyss
 
@@ -479,7 +483,7 @@ Each level hides **3 pearls**. Roughly: one findable by curiosity (look up, go l
 | ◆CP3 | Boss door. The only checkpoint of the last third. |
 | BOSS | The Kraken. |
 
-**Pearls:** ① in the A1 descent, in total darkness, findable only by the sound cue (§10.3). ② in the B1 vent chamber, behind the last vent, **through a 1-tile crack that only Spent Nib fits through** — in the abyss, on 2 pips, which means most players must deliberately take a hit to reach it. The only pearl in the game gated on being small. ③ in C2, inside a Lightless's own light radius — you have to walk into the thing that kills you.
+**Pearls:** ① in the A1 descent, in total darkness, findable only by the sound cue (§10.3). ② in the B1 vent chamber, behind the last vent, **through cracked crust an Ink Bomb opens** *(v1.5: was a 1-tile crack only Spent Nib fits through — see §16)*. ③ in the C2 gallery, on a **one-tile island** twelve rows up, fifteen tiles clear of every wall in the room — the only pearl in the game gated on reach rather than position, and the only one Deep Jet's fourth pip is required for.
 
 ### 7.7 Difficulty curve
 
@@ -557,10 +561,16 @@ One permanent upgrade per world, granted on world clear (except Deep Jet, found 
 | Upgrade | Earned | Effect | Unlocks pearls in |
 |---|---|---|---|
 | **Ink Shot** | Clear W1 | Ranged ink bolt. 1 pip. Kills Drifter/Whipkelp/Bone Shrimp, stuns Eel 90f, breaks kelp knots. `speed 4.0, arc gravity 0.12`. | W1 (none), W2 ② |
-| **Cling** | Clear W2 | Grip any wall for 60 frames, then slide at 1.2 px/f. Re-grip costs 1 pip. | W3 ①, W1 ② (alternate route) |
-| **Ink Bomb** | Clear W3 | Lobbed charge, 20-frame fuse, 3-tile radius. 1 pip. Breaks cracked terrain, kills anything unarmored. | W2 ③, W4 ② |
+| **Cling** | Clear W2 | Grip any wall for 60 frames, then slide at 1.2 px/f. Re-grip costs 1 pip; the **first grip of each airtime is free**. Jumping off a wall is allowed and pushes 2.4 px/f away from it. | W3 ①, W1 ② (alternate route) |
+| **Ink Bomb** | Clear W3 | Lobbed charge, 20-frame fuse, 3-tile radius. 1 pip. Breaks cracked terrain, kills anything unarmored. Thrown with **↓ + C** — §5 allocates one key to ranged ink and the game deliberately fits on one hand. | W2 ③, W4 ② |
 | **Heat Shell** | Clear W4 | A hardened ink layer. **Immunity to heat**: superheated water, Cinder Moth embers, and magma splash no longer harm Nib, and he survives standing in magma itself for 90 frames. Also lets him pass heat-fused debris. | W3 ③, W4 ③ |
 | **Deep Jet** | Mid-W5 | `INK_MAX` 3 → 4, `DASH_COOLDOWN` 10 → 6, `DASH_SPEED` +0.6. | W1 ③, W5 ①②③ |
+
+**Three kinds of terrain, three upgrades, and the symmetry is the point.** A **kelp knot** yields to an Ink Shot, a **cracked wall** to an Ink Bomb, **heat-fused debris** to a Heat Shell. A player who meets one knows immediately which of the things they are carrying is the answer, and a player who does not have it yet knows there is something to come back for.
+
+**Design note — Cling ends vertical gating.** Found in Phase 3: any rock face is a ladder once you can grip it — grip, jump, grip — so from World 3 onward a shelf twelve rows above the floor is a shelf anybody can reach if there is a wall anywhere near it. **Only horizontal distance over a void gates anything after World 2.** World 5's third pearl is a *one-tile* island fifteen clear of every face in its room for exactly this reason.
+
+**Design note — a four-pip pearl is the only kind Deep Jet can gate.** Spent-with-Deep-Jet and Full-without are both three pips and share a reach envelope exactly, so no geometry can tell them apart. A pearl gated on Deep Jet must need four.
 
 **Design note — upgrades and tiers are different currencies.** Heat Shell used to absorb a hit; the tier system (§4.4) does that job now, so Heat Shell is a **pure traversal upgrade**. The rule that falls out of it: **no permanent upgrade ever changes how many hits Nib can take, and no tier is ever permanent.** Upgrades are things you keep and route with; tiers are things you find and lose. Deep Jet owns pip count, Charged owns dash damage, and the two never overlap — a player who has both has learned two separate lessons.
 
@@ -573,7 +583,7 @@ Specced now, built in the phase after the base game ships. Each is a **movement 
 | **Nib** (squid) | Default | The baseline all levels are tuned against. |
 | **Octo** (octopus) | Collect all 15 pearls | `INK_MAX` 4, `WALK_MAX` 1.3, `JUMP_IMPULSE` −4.1, **native Cling with no pip cost and no 60-frame limit**. Slower and floatier; trades speed for total wall control. Trivialises some vertical rooms, struggles in every current. |
 | **Cuttle** (cuttlefish) | Beat the game in under 25 minutes | Hold Jump at fall apex to **glide** at `TERMINAL_FALL 1.4`. `DASH_SPEED` 4.2 (weaker), `INK_MAX` 2. A control character — long, precise, low-power. |
-| **Nautilus** | Beat the game without dying | **Four tiers** — his shell cracks through two visible stages before he is exposed — but he **cannot reach Charged**: an Ink Core is only points to him. `GRAVITY` 0.52, and **cannot dash upward**, only the six non-upward directions. He never shrinks small enough for a 1-tile gap either, so every small-only shortcut is closed. The tank: more hits, no offense, fewer routes. |
+| **Nautilus** | Beat the game without dying | **Four tiers** — his shell cracks through two visible stages before he is exposed — but he **cannot reach Charged**: an Ink Core is only points to him. `GRAVITY` 0.52, and **cannot dash upward**, only the six non-upward directions. The tank: more hits, no offense, fewer routes. *(v1.5: he also used to be the character locked out of small-only shortcuts. There are none — §16.)* |
 
 Rules:
 - Character select on the title screen once any is unlocked; the choice persists.
@@ -701,19 +711,29 @@ This keeps the bundle tiny, avoids licensing entirely, and produces a sound that
 
 ### 10.2 Music
 
+**v1.5: cut from eleven tracks to five.** Checkpoint 2.7 exists to force this judgement at the
+cheapest possible moment — *"if the synth sounds bad here, fall back to fewer, simpler tracks
+now, not in Phase 4"* — and in Phase 3 it was called and the fallback taken. The five chapter
+themes ship; the six below them are struck. §12.7 already makes music a property of a
+*chapter* rather than a level, so this is a shorter list and not a different design.
+
 | Track | Length | Character |
 |---|---|---|
-| Title | 40 s loop | Slow, curious, single melody over a triangle bass |
 | World 1 | 60 s loop | Bright, bouncy, major key — the only genuinely happy track |
 | World 2 | 70 s loop | Modal, drifting, syncopated bass |
 | World 3 | 70 s loop | Waltz in 3/4, minor, a broken music-box motif |
 | World 4 | 60 s loop | Fast, driving, heavy noise-channel percussion |
 | World 5 | 90 s loop | Sparse, arrhythmic, mostly triangle and silence |
-| Boss | 50 s loop | Shared across W1–4, transposed up a step each world |
-| Kraken | 100 s loop | 3 sections that hard-switch on phase change |
-| Level clear | 6 s | |
-| Game over | 5 s | |
-| True ending | 45 s | World 1's melody, slowed, in a minor key |
+| ~~Title~~ | | Struck — the title screen holds World 1's theme |
+| ~~Boss~~ | | Struck — a boss keeps its chapter's theme |
+| ~~Kraken~~ | | Struck — World 5's theme carries the last fight |
+| ~~Level clear~~ · ~~Game over~~ | | Struck — both are SFX stings, not tracks |
+| ~~True ending~~ | | Struck |
+
+**Design note — the descent has to stay audible.** Whatever the list is, each theme is voiced
+lower than the one above it, and `tests/audio.test.ts` asserts that across all five. It caught
+World 3's bass sitting under World 4's in Phase 3, which is the one property five tracks can
+lose that eleven could hide.
 
 ### 10.3 SFX
 
@@ -969,8 +989,33 @@ The game is deliberately hard. Difficulty is a design choice; *inaccessibility* 
 | Vision — contrast | World 5's darkness has a `Light Radius` slider (5 / 7 / 10 tiles). Using it disables leaderboard submission but nothing else. |
 | Photosensitivity | `Reduce Flashing` option: caps flash frequency at 3 Hz, removes the death-screen ink flash, disables boss-hit strobe. |
 | Vestibular | `Screen Shake` slider, 0–100%, and a `Camera Lookahead` toggle. |
-| Cognitive / pacing | **Assist Mode** — infinite continues, checkpoint density doubled, and a 25% enemy speed reduction. Off by default, plainly labelled, and it **stamps runs as `ASSIST` on the local leaderboard rather than blocking them.** This preserves the Classic NES default for everyone who wants it while making the game finishable by someone who can't clear a 3-life gauntlet. |
+| Cognitive / pacing | **Assist Mode** — **built in Phase 3**, see below. Off by default, plainly labelled, and it **stamps runs as `ASSIST` rather than blocking them.** This preserves the Classic NES default for everyone who wants it while making the game finishable by someone who can't clear a 3-life gauntlet. |
 | Audio | Every audio cue has a visual counterpart. The pearl chime pairs with a faint screen-edge shimmer; the pressure heartbeat pairs with a vignette. |
+
+### 13.1 Assist Mode, as built
+
+Scheduled for checkpoint 4.7 and **pulled forward into Phase 3**, because Gate 3 round one
+failed on the most fundamental finding available: the game was not finishable. Phase 4's whole
+job is tuning against playthrough data and its gate asks that 60% of testers reach World 3 —
+neither is possible without a game somebody can complete.
+
+Three provisions, and each is a number rather than a special case somewhere:
+
+| Provision | As built | Why this and not the obvious alternative |
+|---|---|---|
+| **Lives never run out** | The counter does not go down, and there is no game over. The HUD reads `NIBx∞`. | Stronger than "infinite continues", which was this document's original wording. A continue still costs the run its shells and routes the player through the title on the way back. What stops a beginner is not the third death; it is being sent to the start of the world for it. |
+| **Enemies at three-quarter speed** | Every enemy *and every boss* holds still on one frame in four. | A skipped step, not scaled speeds. Every species is a pure function of its own clock (§12.6), so holding the clock slows the patrol, the sine, the fire cycle and the lunge by the same 25% at once — and no species has to know the mode exists. Scaling thirteen sets of constants would have been thirteen chances to get it wrong. |
+| **A soft checkpoint every 32 tiles** | Set at Nib's feet on real footing, forward progress only, never inside a boss arena. | §7.1 spaces conches ~70 tiles apart, so this roughly halves the walk back — "checkpoint density doubled" without re-authoring five levels. The three guards are each a respawn loop that would otherwise be possible. |
+
+**What it deliberately does not touch.** Hazards still kill at every tier. The ink budget is
+still three pips and the tier system is untouched. The level still has to be finished. The
+death is still *counted*, so the no-death bonus stays honest — the counter is what the run
+costs, and the death is what happened.
+
+**It is a title-screen switch on one key, and it persists** to `settings.assistMode`. It
+cannot be changed mid-level: a run is played at one difficulty, or the input log means two
+different things at two different points in it and the tally is describing a game nobody
+played.
 
 ---
 
@@ -1024,7 +1069,15 @@ M1–M8 is the ship. M9 follows.
 | 5 | The name | **INKFALL**, confirmed. No longer a working title. |
 | 6 | Repository | **Done.** Lives at [github.com/Foolless/inkfall](https://github.com/Foolless/inkfall), with the design history preserved. |
 
-### Resolved in v1.4 (Phase 2)
+### Resolved in v1.5 (Phase 3)
+
+| # | Question | Decision |
+|---|---|---|
+| 7 | The one-tile gap (opened in v1.4, below) | **Answered twice, on two branches, and both answers ship.** v1.4 chose option 3 and built the `CRACK` tile; Phase 3, working in parallel, chose option 2 and moved W5 ② behind cracked crust. The tile stays — a squeeze-crack is a real mechanic and World 1 uses one — and the pearl stays where Phase 3 put it, so **no pearl in the game is gated on having been hit**. See the reconciliation below. |
+| 8 | Can a level be completability-tested with an empty loadout? | **No — it must be tested with what the player is guaranteed to be holding.** World 2's first room is a kelp knot only an Ink Shot opens, and every player who reaches it earned one for clearing World 1. The loadout is *derived* from the campaign order and §8.5's table, never authored per level, because a level that declared its own would eventually disagree with the order it sits in. |
+| 9 | Is a Whipkelp stompable? | **No.** §6.1 always said so; the implementation defaulted to yes because it is unarmoured. Being unstompable and being armoured are different properties: a Drifter and a Whipkelp are both soft and neither has a top worth landing on. |
+
+### Resolved in v1.4 (Phase 2), reconciled in v1.7
 
 **A one-tile gap does not exclude Full Nib — resolved with a `CRACK` tile.** §4.4 and §7.1 rest on Spent Nib fitting through passages Full Nib cannot, and with this document's own numbers that is not true: tiles are 16 px, Full's hitbox is 12×14 and Spent's is 10×10, so *both* fit through a one-tile opening in either axis. The difference between the tiers is real everywhere else — two pips instead of three, a slightly higher jump, 50% longer on collapsing sand — but the geometric one does not exist.
 
@@ -1032,13 +1085,19 @@ Three ways out were considered:
 
 1. **Make Full taller than a tile.** A 12×18 hitbox in a 16×24 sprite cell makes one-tile crawl-spaces genuinely Spent-only. It changes every jump arc and every sprite Nib has, reopens a Phase 1 decision, and forces a re-run of every feel guarantee.
 2. **Drop the claim**, and let the tier difference live entirely in the pip budget. Cheap, and costs the game an idea.
-3. **Make the passage a tile type.** A `CRACK` is solid to every body except a small one. Legend character `x`.
+3. **Make the passage a tile type.** A `CRACK` is solid to every body except a small one. Legend character **`n`**, for narrow — it was authored as `x`, which Phase 3 had independently spent on the Ink Bomb's `CRACKED` walls across four levels.
 
 **Chosen: (3).** It is a rule rather than emergent geometry, and that is the honest trade — the fiction ("a crack too small for a full-sized squid") is intact, the art reads it at a glance, nothing about Phase 1's tuning moves, and the reachability solver can now *assert* that a shortcut is Spent-only rather than take it on trust. W5's pearl ② has something to sit behind, and World 1 carries one: a cache of shells under the Puffer tunnel's floor.
 
 The rule that comes with it, and it is not optional: **a crack is never on the critical path.** A player who is never hit must never meet a wall that only being hit could have opened. `tests/reach.test.ts` proves every campaign level completable at **Full** as well as at Spent, which is what makes that a guarantee rather than an intention.
 
 `src/game/reach.ts` still derives *clearance* from the hitbox rather than assuming it, so if the tier boxes ever do change, the solver notices on its own.
+
+**Phase 3 answered the same question (2), in parallel, without the branch above.** World 5 was authored, the numbers were unchanged, and options (1) and (3) both looked more expensive than the idea was worth in a phase whose job is content. W5 ② went behind cracked crust.
+
+**Reconciled in v1.7: both answers stand, and they do not fight.** The `CRACK` tile is real and World 1 carries one, so the mechanic exists and the solver can assert it — that is (3), and it is kept. W5's pearl ② stays behind an Ink Bomb wall — that is (2)'s placement, and it is kept for its own reason rather than as a fallback: **the abyss is the worst place in the game to ask somebody to take a hit on purpose**, and a pearl gated on being Spent is exactly that request. So §7.1's small-only passages exist and are *optional shortcuts only*, which is what the "never on the critical path" rule was already saying.
+
+One thing genuinely changed: the crack's legend character. It was authored as `x`, and Phase 3 had spent `x` on `CRACKED` — the Ink Bomb's walls — across sixty-one cells in four levels against this one. The squeeze-crack is `n` now. Tile ids are not save data, but legend characters are the level author's vocabulary, and two mechanics cannot share one letter.
 
 ### Still open
 
@@ -1153,3 +1212,27 @@ export const DISPLAY = {
 | Worlds | Ocean descent | Fish-out-of-water; Mario mapping; ink surrealism | Descent gives an emotional arc a level list can't |
 | Input | Keyboard only | Gamepad; touch; all three | Tuning focus; touch would compromise precision |
 | Meta | Pearls + score + speedrun + upgrades + characters | Any single one | They reinforce each other: upgrades enable pearls, pearls unlock characters, characters reset the speedrun |
+| Ink Bomb's button | **↓ + C**, sharing C with the bolt | A sixth key | Found in Phase 3: §5 allocates one key to ranged ink and the game deliberately fits on one hand. A crouch modifier costs nothing to learn and keeps the left hand where it is. |
+| Each upgrade opens exactly one terrain type | Knots→Ink Shot, cracked→Ink Bomb, fused→Heat Shell | One "locked" tile that any upgrade opens; upgrades that only affect movement | Found in Phase 3: a one-to-one mapping means a player who sees a knot knows *which* thing they are missing. Terrain an upgrade opens is expressed as membership of the world's `collapsed` set, so it costs no new collision path. |
+| Cling can be jumped off, and the first grip of each airtime is free | 2.4 px/f push-off; later grips in the same airtime cost a pip | A grip that only slows the slide; every grip costing a pip | Found in Phase 3: without a push-off, a wall is a place to wait rather than a way to travel. Charging the *first* grip made every incidental brush against rock a tax, which reads as the wall being sticky rather than the player being clever. |
+| Cling ends vertical gating | From World 3 on, only horizontal distance over a void gates anything | Keeping vertical walls as gates and hoping players don't grip them | Found in Phase 3: any rock face is a ladder once it is grippable, so a tall shaft stopped being a lock the moment Cling was granted. W5's pearl ③ became a one-tile island 15 tiles clear of every face. |
+| A four-pip pearl is the only kind Deep Jet can gate | Gates sized to four pips | Gates sized to three | Found in Phase 3: Spent+Deep Jet and Full-without share a reach envelope exactly, so any three-pip gate is open to a player who never found the upgrade. |
+| Cling's teaching room is a four-tile chimney | Facing walls, alternating grips | §7.4's "a single wall with no threat" | Found in Phase 3: one wall teaches the grip but not the push-off, and the push-off is the half that makes Cling a movement upgrade. |
+| W4's pearl ② sits behind a bombed wall | Cracked crust over an alcove | Inside a Magma Snail's shell, per the beat sheet | Found in Phase 3: a pearl inside a stunned enemy has no stable position to fall to and made the pickup depend on where the shell stopped sliding. |
+| W5's pearl ② sits behind cracked crust | A bomb gate | A crack only a Small Nib fits through | Found in Phase 3: a size gate rewards being hurt, and the tier is meant to be a resource the player protects. |
+| The classic difficulty is **softened**, before any tuning data exists | More Cores, more bulbs, a fourth conch, five continues | Waiting for a playthrough; leaving Assist Mode as the only answer | Found after Gate 3 round one. §7.7's ladder is written for a game that reads too *easy* and says which dial to move first; run downwards it says the same thing — Ink Cores are the primary dial. A mode nobody can turn off would be a tuning problem wearing an accessibility feature's clothes. |
+| Worlds 3-5 get the Ink Cores §7.1 always required | One each | Leaving them at zero | Found in the tuning pass: §7.1 says "1–2 Ink Cores from World 3 onward" and Worlds 3, 4 and 5 had **none**. The primary dial was set to nothing across the back half of the game — the half the difficulty complaint was about. |
+| A fourth conch per level | Three through the level plus the boss door | Keeping three, or adding soft checkpoints to classic play | §7.1 spaced conches ~70 tiles apart at three. At four the longest walk back in the game drops by about a third, and the difficulty stays where §4.5 puts it — in the distance between conches — rather than moving into the hit count. |
+| Continues 3 → 5 | Five | More starting lives | A continue already costs the run its shells and the level's progress, so it is a penalty that has teeth; more *lives* would soften the moment-to-moment game, which is the part Gate 1 said was fine. |
+| Assist Mode gives **unlimited lives**, not infinite continues | The counter never goes down and there is no game over | §13's original "infinite continues"; more starting lives | Found at Gate 3: what stops a beginner is not the third death, it is being sent back to the start of the world for it. A continue also resets the shells, which quietly makes the assisted run a worse one. |
+| Assist Mode's slowdown is a **skipped step** | Enemies and bosses hold still one frame in four | Scaling each species' speed constants by 0.75 | Found in Phase 3: every species is a pure function of its own clock, so holding the clock slows the patrol, the sine, the fire cycle and the lunge together. Scaling thirteen sets of constants is thirteen chances to miss one, and the clock-driven enemies would have desynchronised rather than slowed. |
+| Assist Mode is built in Phase 3, not 4.7 | Pulled forward | Keeping it in the accessibility checkpoint | Found at Gate 3: the game was not finishable, and Phase 4 cannot tune against playthrough data from a playthrough that does not happen. |
+| The world map is the game's **continue** | The cursor opens on the deepest unlocked level | A Continue entry on the title; resuming from the save at boot | Found in Phase 4: `progress.unlocked` had been written since Phase 2 and never read, so every session started at the tide pools. §11.1 already says the map is where progression is *felt*, and a cursor that lands where you got to is that sentence made true. |
+| A replay hands back to the **map**, not the next world | Levels already cleared return to the map when finished | Rolling on into the next level as a first run does | Found in Phase 4: somebody who went back to World 2 for a pearl wants the map, not World 3 again. |
+| Pearl ids run **left to right along a level** | Position order, fixed forever | The order §7 happens to describe them in | Found in Phase 4: ids are save-file keys, so their order is a promise (§12.7). §7.5's prose numbered World 4's magma pearl ③ and the level had it as id 1; the prose moved, because the ids cannot. |
+| All fifteen pearls **record** Octo's unlock in v1 | The flag is written; the character is not built | Leaving the unlock to the post-1.0 character work | Found in Phase 4: Octo's movement is §8.6's later work, but withholding the *flag* would mean asking somebody who finished the collection in v1 to do it again in v2. |
+| The cue vocabulary lives in the **game** layer | `game/cues.ts`, shared by both sides | The audio layer owning its own list | Found in Phase 4: the host was casting the world's cue strings to the audio layer's narrower type, and seven sounds had been firing silently for a phase. A union both sides share cannot drift; a cast can. |
+| Juice is **render-side**, always | Shake and particles outside the simulation | Particles as world entities; shake through the camera | Found in Phase 4: a particle in the world is state the replay hash has to agree on, and a shake applied through the camera makes two identical input logs produce two different worlds the moment one stutters. |
+| Shell pitch rises in the **synth**, not the simulation | The audio layer tracks its own run of shells | Giving the world a shell chain for the synth to read | Found in Phase 4: a run of shells is a fact about sound. Adding simulation state so the synth could read it is the tail wagging the dog. |
+| The soundtrack is **five tracks, not eleven** | The five chapter themes | §10.2's title, boss, Kraken, clear, game-over and true-ending tracks | Checkpoint 2.7's judgement call, answered in Phase 3 and answered as "fall back" — which is the option the checkpoint names and the moment it names for taking it. Eleven tracks is ~6 days of authoring against a synth nobody wanted more of. |
+| Completability is tested with a **derived** loadout | `loadoutOnArrival(id)` from campaign order + `GRANTED_ON_CLEAR` | Authoring the expected loadout per level | Found in Phase 3: an authored loadout is a second copy of the campaign order, and the copy is what goes stale. Deriving it means adding an upgrade to a chapter re-checks every later level for free. |

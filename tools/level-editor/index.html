@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>INKFALL — level editor</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%F0%9F%97%BA%3C/text%3E%3C/svg%3E" />
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; padding: 24px; background: #05090f; color: #9cb0b8;
+             font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 13px; }
+      h1 { font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #00e5cc; margin: 0 0 4px; }
+      .sub { margin: 0 0 20px; color: #69808a; max-width: 74ch; line-height: 1.6; }
+      #viewport { overflow: auto; border: 1px solid #1d2b36; background: #0b1116; max-height: 58vh; resize: vertical; }
+      canvas { display: block; touch-action: none; cursor: crosshair; image-rendering: pixelated; }
+      .bar { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; align-items: center; }
+      .chip { border: 1px solid #1d2b36; border-radius: 3px; color: #e3eef0; font: inherit; font-size: 11px;
+              padding: 5px 8px; cursor: pointer; background: #0c151e; display: flex; gap: 6px; align-items: center; }
+      .chip.on { outline: 2px solid #00e5cc; outline-offset: 1px; }
+      .chip i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; font-style: normal; }
+      textarea { width: 100%; height: 260px; background: #0c151e; color: #9cb0b8;
+                 border: 1px solid #1d2b36; border-radius: 4px; padding: 12px; font: inherit; resize: vertical;
+                 white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+      input[type=text], input[type=number] { background: #0c151e; color: #e3eef0; border: 1px solid #1d2b36;
+                 border-radius: 3px; padding: 6px 8px; font: inherit; width: 110px; }
+      button { background: #0c151e; color: #e3eef0; border: 1px solid #1d2b36; border-bottom-width: 2px;
+               border-radius: 4px; padding: 7px 13px; font: inherit; cursor: pointer; }
+      button:hover { border-color: #00766a; }
+      #status { min-height: 1.4em; margin: 10px 0 0; white-space: pre-wrap; }
+      label { color: #69808a; }
+      .group { border-top: 1px solid #14202a; padding-top: 10px; margin-top: 6px; }
+      .group > span { color: #4d616b; text-transform: uppercase; letter-spacing: .1em; font-size: 10px;
+                      margin-right: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>Level editor</h1>
+    <p class="sub">
+      Paints the ASCII grid and the entity list the game loads, and writes the
+      exact <code>LevelDef</code> literal the level files are authored as. Paste
+      one in and hit Load; the box updates as you paint. Round-tripping every
+      shipped level through this format is covered by
+      <code>tests/level-source.test.ts</code>, so what you copy out is what the
+      game reads in.
+      <br /><br />
+      <strong>Left click</strong> paints the selected tile or drops the selected
+      entity. <strong>Right click</strong> erases: back to empty for tiles, and
+      removes whatever entity is under the cursor. The grid validates on every
+      change — a ragged row or a buried Snapper says so below rather than three
+      screens later.
+    </p>
+
+    <div id="viewport"><canvas id="grid" width="900" height="400"></canvas></div>
+
+    <div class="bar group"><span>tiles</span><span id="tiles" class="bar" style="margin:0"></span></div>
+    <div class="bar group"><span>markers</span><span id="markers" class="bar" style="margin:0"></span></div>
+    <div class="bar group"><span>entities</span><span id="entities" class="bar" style="margin:0"></span></div>
+
+    <div class="bar group">
+      <label for="zoom">zoom</label><input id="zoom" type="number" value="12" min="4" max="32" />
+      <label for="width">w</label><input id="width" type="number" value="60" min="4" max="400" />
+      <label for="height">h</label><input id="height" type="number" value="24" min="4" max="200" />
+      <button id="resize" type="button">Resize</button>
+      <button id="load" type="button">Load from source</button>
+      <button id="copy" type="button">Copy</button>
+      <span id="where"></span>
+    </div>
+
+    <textarea id="source" spellcheck="false" aria-label="Level source"></textarea>
+    <p id="status"></p>
+    <script type="module" src="./editor.ts"></script>
+  </body>
+</html>

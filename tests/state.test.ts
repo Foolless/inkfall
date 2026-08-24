@@ -15,6 +15,10 @@ import {
 import { POINTS } from '../src/game/score.js'
 import { kill } from '../src/game/player.js'
 import { glyph, MISSING } from '../src/content/font.js'
+import { campaign } from '../src/content/levels/index.js'
+import { buildMap } from '../src/game/map.js'
+import { OPTION_ROWS } from '../src/game/options.js'
+import { defaultSave } from '../src/engine/save.js'
 import { levelFrom } from './helpers.js'
 
 const LEVEL = levelFrom(['S........E', '##########'], 'flow')
@@ -232,6 +236,42 @@ describe('the level-clear tally', () => {
     expect(s.score).toBeGreaterThan(POINTS.LEVEL_CLEAR)
   })
 
+  /**
+   * The bug this exists to stop coming back: the run banked only the tally's
+   * bonuses, so every stomp, chain, inked kill and boss hit a player made
+   * inside a level was thrown away at the exit — after the HUD had spent the
+   * whole level showing them those points.
+   */
+  test('points earned inside the level are banked, not discarded', () => {
+    p.tap(Act.Jump).step(0, 5)
+    s.world.score = 4_250 // stomps, a chain, a boss hit
+    s.world.cleared = true
+    p.step(0)
+
+    expect(s.summary!.levelPoints).toBe(4_250)
+    expect(s.tally.map((l) => l.label)).toContain('ENEMIES')
+    p.step(0, TALLY_LINE_FRAMES * 10).tap(Act.Jump)
+    expect(s.score).toBeGreaterThanOrEqual(4_250)
+  })
+
+  /**
+   * The HUD shows `run + world` while playing and the tally counts up from
+   * `run` — so the tally's lines have to sum to exactly what the world scored,
+   * plus the bonuses, or the number visibly jumps at the exit.
+   */
+  test('the itemised lines account for every point the world scored', () => {
+    p.tap(Act.Jump).step(0, 5)
+    s.world.shells = 12
+    s.world.pearls = [true, false, false]
+    s.world.score = 12 * POINTS.SHELL + POINTS.PEARL + 900
+    s.world.cleared = true
+    p.step(0)
+
+    const earned = ['SHELLS', 'PEARLS', 'BOSS', 'ENEMIES']
+    const itemised = s.tally.filter((l) => earned.includes(l.label)).reduce((n, l) => n + l.points, 0)
+    expect(itemised).toBe(s.world.score)
+  })
+
   test('the time bonus comes off a par clock, and never goes negative', () => {
     p.tap(Act.Jump)
     s.levelFrames = (DEFAULT_PAR_SECONDS + 60) * 60 // well over par
@@ -294,6 +334,12 @@ describe('the font', () => {
       '[X] INK DASH',
       '[C] INK SHOT',
       'NIBx3',
+      'NIBx∞',
+      'A: ASSIST ON   INFINITE LIVES',
+      'A: ASSIST OFF',
+      'ASSIST',
+      'THE ABYSS IS BEHIND YOU',
+      'SOMETHING IS STILL DOWN THERE',
       'S000',
       '1,234,567',
       '10:05',
@@ -301,6 +347,44 @@ describe('the font', () => {
     ].join('')
     for (const ch of new Set(shown)) {
       expect(glyph(ch), `no glyph for ${JSON.stringify(ch)}`).not.toBe(MISSING)
+    }
+  })
+
+  /**
+   * The list above is hand-written and a hand-written list goes stale. Hints
+   * come from level data, and that is where the hole actually was: World 1's
+   * `HOLD ↑ + X TO DASH UP` — Gate 1's entire fix for nobody finding the
+   * up-dash — drew the arrow as a missing-character box for two phases.
+   */
+  /**
+   * The map's cursor and its pearl marks, from the source of truth rather than
+   * from a list somebody remembered to update. `>` had been drawing as a
+   * missing-character box since the map was built, for exactly that reason.
+   */
+  test('every glyph the menus use is drawable', () => {
+    const settings = defaultSave().settings
+    const menus = [
+      '> < * o + -',
+      'THE DESCENT',
+      'SPACE TO DIVE',
+      'PEARLS 0/15',
+      'OPTIONS',
+      'PRESS A KEY',
+      ...OPTION_ROWS.map((r) => r.label + r.value(settings)),
+      ...buildMap().map((n) => n.name.toUpperCase()),
+    ].join('')
+    for (const ch of new Set(menus)) {
+      expect(glyph(ch), `no glyph for ${JSON.stringify(ch)}`).not.toBe(MISSING)
+    }
+  })
+
+  test('every hint in every shipped level is drawable, arrows included', () => {
+    for (const def of campaign()) {
+      for (const hint of def.hints ?? []) {
+        for (const ch of new Set(hint.text)) {
+          expect(glyph(ch), `${def.id} hint has no glyph for ${JSON.stringify(ch)}`).not.toBe(MISSING)
+        }
+      }
     }
   })
 

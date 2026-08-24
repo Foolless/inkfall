@@ -27,9 +27,10 @@
  * exist. That is exactly the question PRD §12.8 asks.
  */
 
-import { DISPLAY, SPENT, TIERS, type TierIndex } from './constants.js'
+import { DISPLAY, SPENT, TIERS, UPGRADES, type TierIndex } from './constants.js'
 import { Tile, tileAt, type TileMap } from './tilemap.js'
 import { spawnClam, type Clam } from './hazards.js'
+import { hasUpgrade, maskOf, type UpgradeId } from './upgrades.js'
 import type { LoadedLevel } from '../content/levels/format.js'
 
 const T = DISPLAY.TILE
@@ -70,7 +71,15 @@ const MAX_FALL = 20
 
 export interface ReachOptions {
   tier?: TierIndex
-  /** Ids from PRD §8.5. Only Deep Jet changes the envelope in v1. */
+  /**
+   * Ids from PRD §8.5.
+   *
+   * Four of the five change what the solver believes about a level, and each
+   * one in a different register: **Deep Jet** widens the envelope, **Ink Bomb**
+   * and **Heat Shell** open terrain, and **Cling** adds places to rest. Ink
+   * Shot changes nothing here, because killing a Drifter has never been what
+   * made a gap crossable.
+   */
   upgrades?: readonly string[]
 }
 
@@ -103,7 +112,17 @@ export function clearanceTiles(tier: TierIndex): number {
 function isGroundTile(map: TileMap, tx: number, ty: number): boolean {
   const t = tileAt(map, tx, ty)
   // Crumble counts: it holds for at least 24 frames, which is a platform.
-  return t === Tile.SOLID || t === Tile.SLICK || t === Tile.ONEWAY || t === Tile.CRUMBLE
+  // Cracked and fused count too — they are walls until an upgrade removes
+  // them, and a wall is something to stand on.
+  return (
+    t === Tile.SOLID ||
+    t === Tile.SLICK ||
+    t === Tile.ONEWAY ||
+    t === Tile.CRUMBLE ||
+    t === Tile.CRACKED ||
+    t === Tile.FUSED ||
+    t === Tile.KNOT
+  )
 }
 
 function isBlocking(map: TileMap, tx: number, ty: number, small: boolean): boolean {
@@ -111,63 +130,155 @@ function isBlocking(map: TileMap, tx: number, ty: number, small: boolean): boole
   // A crack is solid to everyone but Spent Nib, which is what makes a
   // small-only shortcut expressible — and assertable.
   if (t === Tile.CRACK) return !small
-  return t === Tile.SOLID || t === Tile.SLICK || t === Tile.CRUMBLE
+  // The upgrade-opened terrain is solid here too; `opened()` is what lets a
+  // solver holding the right upgrade walk through it.
+  return (
+    t === Tile.SOLID ||
+    t === Tile.SLICK ||
+    t === Tile.CRUMBLE ||
+    t === Tile.CRACKED ||
+    t === Tile.FUSED ||
+    t === Tile.KNOT
+  )
 }
 
+/**
+ * Magma is a hazard like urchins are. Superheated water is not.
+ *
+ * §7.5 C1 crosses hot pools in stages against a ninety-frame scald timer, which
+ * is a *timing* problem, and this solver is deliberately not a timing solver
+ * (see the header). Treating hot water as passable is the honest reading:
+ * whether the crossing is fair is a human question, whether it exists is this
+ * one.
+ */
 function isDeadly(map: TileMap, tx: number, ty: number): boolean {
-  return tileAt(map, tx, ty) === Tile.HAZARD
+  const t = tileAt(map, tx, ty)
+  return t === Tile.HAZARD || t === Tile.MAGMA
 }
 
 function isFluidTile(map: TileMap, tx: number, ty: number): boolean {
   const t = tileAt(map, tx, ty)
-  return t === Tile.WATER || (t >= Tile.CURRENT_R && t <= Tile.CURRENT_D)
+  return t === Tile.WATER || t === Tile.HOT || (t >= Tile.CURRENT_R && t <= Tile.CURRENT_D)
 }
 
 /**
- * A clam's shell is ground for part of its cycle, and Nib can wait for it.
+ * Footing that is not terrain.
  *
- * Timing is a human problem; existence is the solver's. Treating a clam as
- * ground is what lets a corridor whose only footing is closed shells pass —
- * see PRD §7.2 C2, which is built entirely on that idea.
+ * Two things in the game are platforms without being tiles, and both are
+ * platforms *some of the time*: a crush clam's shell while it is closed, and a
+ * Hookline's flat top for the whole of its sweep. Timing is a human problem;
+ * existence is the solver's, and a corridor whose only footing is closed shells
+ * (PRD §7.2 C2) or a twenty-tile gap crossed on three hooks (§7.4 B2) has to
+ * pass — those rooms are built on nothing else.
+ *
+ * A hook contributes every tile along its path rather than its current
+ * position, because over one cycle it visits all of them and Nib can wait.
  */
-function clamGround(clams: readonly Clam[]): Set<number> {
-  const out = new Set<number>()
+function entityGround(level: LoadedLevel, clams: readonly Clam[]): { footing: Set<number>; solid: Set<number> } {
+  const footing = new Set<number>()
+  const solid = new Set<number>()
+  const key = (tx: number, ty: number) => ty * 100000 + tx
+
+  // A closed clam is footing *and* a wall — its shell fills the cell, so Nib
+  // cannot be inside one. A hook is only ever footing: the space its top sweeps
+  // through is the space he is standing in.
   for (const c of clams) {
     const ty = Math.floor(c.y / T)
-    for (let tx = Math.floor(c.x / T); tx < Math.floor((c.x + c.w) / T); tx++) out.add(ty * 100000 + tx)
+    for (let tx = Math.floor(c.x / T); tx < Math.floor((c.x + c.w) / T); tx++) {
+      footing.add(key(tx, ty))
+      solid.add(key(tx, ty))
+    }
   }
-  return out
+
+  for (const e of level.entities) {
+    if (e.type !== 'hookline') continue
+    const span = e.span ?? 6
+    const drop = e.drop ?? 5
+    const dir = e.dir === 'left' ? -1 : 1
+    // The whole swept rectangle: it descends `drop` rows and travels `span`
+    // columns, and every cell in that path is somewhere the top has been.
+    for (let dx = 0; dx <= span; dx++) {
+      for (let dy = 0; dy <= drop; dy++) footing.add(key(e.x + dir * dx, e.y + dy))
+    }
+  }
+  return { footing, solid }
 }
 
 export function analyseReach(level: LoadedLevel, options: ReachOptions = {}): ReachResult {
   const { map } = level
   const tier = options.tier ?? 0
-  const deepJet = options.upgrades?.includes('deepJet') ?? false
-  const maxPips = TIERS[tier]!.inkMax + (deepJet ? 1 : 0)
+  const held = maskOf(options.upgrades)
+  const has = (id: UpgradeId) => hasUpgrade(held, id)
+  const maxPips = TIERS[tier]!.inkMax + (has('deepJet') ? UPGRADES.DEEP_JET_PIPS : 0)
   const clearance = clearanceTiles(tier)
   const small = tier === SPENT
+
+  // Terrain an upgrade opens is simply *not there* as far as geometry goes.
+  // Modelling it as removed rather than as a special case is what keeps the
+  // solver honest in both directions: without the upgrade the wall is a wall,
+  // and the level has to be finishable anyway.
+  const opened = (tx: number, ty: number): boolean => {
+    const t = tileAt(map, tx, ty)
+    if (t === Tile.KNOT) return has('inkShot')
+    if (t === Tile.CRACKED) return has('inkBomb')
+    if (t === Tile.FUSED) return has('heatShell')
+    return false
+  }
+
+  /**
+   * Magma is a hazard like urchins are — unless Heat Shell is held.
+   *
+   * §8.5 buys ninety frames of standing in it, which is enough to cross one
+   * pool and not enough to live in one. That is a *timing* question and this
+   * solver is deliberately not a timing solver (see the header), so with the
+   * shell a magma tile is passable and whether the crossing is fair stays a
+   * human question. Without it, magma is exactly as fatal as a spike.
+   */
+  const deadly = (tx: number, ty: number): boolean => {
+    const t = tileAt(map, tx, ty)
+    if (t === Tile.MAGMA) return !has('heatShell')
+    return isDeadly(map, tx, ty)
+  }
 
   const clams = level.entities
     .filter((e): e is typeof e & { type: 'clam' } => e.type === 'clam')
     .map(spawnClam)
-  const shells = clamGround(clams)
-  const isClamShell = (tx: number, ty: number) => shells.has(ty * 100000 + tx)
+  const carried = entityGround(level, clams)
+  const isFooting = (tx: number, ty: number) => carried.footing.has(ty * 100000 + tx)
+  const fillsTheCell = (tx: number, ty: number) => carried.solid.has(ty * 100000 + tx)
 
   /** Can Nib occupy this cell — enough clear headroom, and nothing lethal? */
   const open = (tx: number, ty: number): boolean => {
     if (tx < 0 || tx >= map.width || ty < 0 || ty >= map.height) return false
     for (let i = 0; i < clearance; i++) {
-      if (isBlocking(map, tx, ty - i, small) || isDeadly(map, tx, ty - i)) return false
-      if (isClamShell(tx, ty - i)) return false
+      if (opened(tx, ty - i)) continue
+      if (isBlocking(map, tx, ty - i, small) || deadly(tx, ty - i)) return false
+      if (fillsTheCell(tx, ty - i)) return false
     }
     return true
   }
+
+  const ground = (tx: number, ty: number): boolean =>
+    !opened(tx, ty) && (isGroundTile(map, tx, ty) || isFooting(tx, ty))
+
+  /**
+   * Cling turns a wall into somewhere to rest.
+   *
+   * Understated on purpose, like every number in this file: the solver grants a
+   * grip only where there is wall directly beside the cell, and it does not
+   * model the sixty-frame limit or the pip a re-grip costs. Both of those make
+   * the real thing *harder* than the model, which is the safe direction — a
+   * solver that overstated reach would bless a shaft nobody can climb.
+   */
+  const clingable = (tx: number, ty: number): boolean =>
+    has('cling') && (ground(tx - 1, ty) || ground(tx + 1, ty))
 
   /** Can he come to rest here — ground under his feet, or water around him? */
   const standable = (tx: number, ty: number): boolean => {
     if (!open(tx, ty)) return false
     if (isFluidTile(map, tx, ty)) return true
-    return isGroundTile(map, tx, ty + 1) || isClamShell(tx, ty + 1)
+    if (ground(tx, ty + 1)) return true
+    return clingable(tx, ty)
   }
 
   // Index rest points by column, so an edge search looks at a handful of

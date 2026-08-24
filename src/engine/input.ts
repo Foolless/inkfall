@@ -80,6 +80,35 @@ export class Keyboard {
     this.binds = binds
   }
 
+  /**
+   * Replace the bind table live, for §13's key remapping.
+   *
+   * Held keys are dropped at the same time: a key that was down under the old
+   * table has no keyup under the new one, so without this a rebind mid-stride
+   * leaves Nib walking into a wall forever.
+   */
+  setBinds(binds: Record<string, Action>): void {
+    this.binds = binds
+    this.held = 0
+    this.stickyPressed = 0
+  }
+
+  /**
+   * Drop everything held and everything pressed since the last snapshot.
+   *
+   * For screens that handle raw key events themselves — the options screen
+   * reads `keydown` directly, because a bind row has to be able to capture keys
+   * that otherwise mean something. Without this the driver *also* records the
+   * press, and the key that dismissed a screen arrives again on the one behind
+   * it: Escape leaving Options was landing on the title as a confirm and
+   * opening the world map.
+   */
+  flush(): void {
+    this.held = 0
+    this.stickyPressed = 0
+    this.prevHeld = 0
+  }
+
   attach(target: Pick<Window, 'addEventListener'>): void {
     target.addEventListener('keydown', (e) => {
       const ev = e as KeyboardEvent

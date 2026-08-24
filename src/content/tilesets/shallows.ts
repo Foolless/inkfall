@@ -179,7 +179,21 @@ export interface Tileset {
   crumble: SpriteDef
   hazard: SpriteDef
   slick: SpriteDef
-  crack: SpriteDef
+  /**
+   * A squeeze-crack, and the terrain an upgrade opens. All optional, because a
+   * world without one has no business authoring a cel for it — the Tide Pools
+   * have no bomb walls and the Abyss has no squeeze-cracks, and a required
+   * field would mean unused sprites in every chapter.
+   */
+  crack?: SpriteDef
+  cracked?: SpriteDef
+  fused?: SpriteDef
+  knot?: SpriteDef
+  /**
+   * Molten rock and superheated water, painted rather than blitted for the
+   * same reason water is: both are translucent and both move.
+   */
+  heat?: { magma: string; hot: string; crest: string }
   /**
    * Water is painted rather than blitted: it is translucent, so what is behind
    * it has to show through. A sprite would have to be opaque or carry an alpha

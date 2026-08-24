@@ -4,7 +4,18 @@ import { NIB_FRAMES } from '../src/content/sprites/nib.js'
 import { ENEMY_FRAMES } from '../src/content/sprites/enemies.js'
 import { PICKUP_FRAMES } from '../src/content/sprites/pickups.js'
 import { SHALLOWS_FRAMES } from '../src/content/tilesets/shallows.js'
+import { KELP_FRAMES } from '../src/content/tilesets/kelp.js'
+import { WRECK_FRAMES } from '../src/content/tilesets/wreck.js'
+import { VENTS_FRAMES } from '../src/content/tilesets/vents.js'
+import { ABYSS_FRAMES } from '../src/content/tilesets/abyss.js'
+import { KELP_ENEMY_FRAMES } from '../src/content/sprites/kelp.js'
+import { WRECK_ENEMY_FRAMES } from '../src/content/sprites/wreck.js'
+import { VENTS_ENEMY_FRAMES } from '../src/content/sprites/vents.js'
+import { ABYSS_ENEMY_FRAMES } from '../src/content/sprites/abyss.js'
+import { PROJECTILE_FRAMES } from '../src/content/sprites/projectiles.js'
 import { BOSS_FRAMES } from '../src/content/sprites/bosses.js'
+import { TILESETS } from '../src/content/tilesets/index.js'
+import { CHAPTERS } from '../src/content/chapters.js'
 import { decode } from '../src/content/sprites/format.js'
 
 /**
@@ -29,7 +40,23 @@ describe('the master palette', () => {
   })
 })
 
-const ALL_FRAMES = [...NIB_FRAMES, ...ENEMY_FRAMES, ...PICKUP_FRAMES, ...SHALLOWS_FRAMES, ...BOSS_FRAMES]
+/** Every hand-authored frame in the game. Nothing is exempt from these rules. */
+const TILESET_FRAMES = [...SHALLOWS_FRAMES, ...KELP_FRAMES, ...WRECK_FRAMES, ...VENTS_FRAMES, ...ABYSS_FRAMES]
+const ROSTER_FRAMES = [
+  ...ENEMY_FRAMES,
+  ...KELP_ENEMY_FRAMES,
+  ...WRECK_ENEMY_FRAMES,
+  ...VENTS_ENEMY_FRAMES,
+  ...ABYSS_ENEMY_FRAMES,
+]
+const ALL_FRAMES = [
+  ...NIB_FRAMES,
+  ...ROSTER_FRAMES,
+  ...PICKUP_FRAMES,
+  ...PROJECTILE_FRAMES,
+  ...TILESET_FRAMES,
+  ...BOSS_FRAMES,
+]
 
 describe('sprite palettes', () => {
   test('every frame uses at most 3 colours plus transparent', () => {
@@ -93,12 +120,12 @@ describe('pickup frames', () => {
 
 describe('tileset frames', () => {
   test('every tile cel fills a whole 16x16 cell, except the one-way ledge', () => {
-    for (const f of SHALLOWS_FRAMES) {
+    for (const f of TILESET_FRAMES) {
       expect([f.w, f.h], f.name).toEqual([16, 16])
       const opaque = decode(f).filter((p) => p !== 0).length
       // A one-way ledge is a thin plank, an urchin is spikes, and a crack is
       // mostly the gap it is named after. Everything else is a full cell.
-      const partial = ['Oneway', 'Urchin', 'Crack'].some((n) => f.name.includes(n))
+      const partial = ['Oneway', 'Urchin', 'Hazard', 'Crack'].some((n) => f.name.includes(n))
       const wanted = partial ? 16 : 256
       expect(opaque, `${f.name} covers ${opaque} pixels`).toBeGreaterThanOrEqual(wanted)
     }
@@ -108,6 +135,47 @@ describe('tileset frames', () => {
     const top = SHALLOWS_FRAMES.find((f) => f.name === 'sandTop')!
     const fill = SHALLOWS_FRAMES.find((f) => f.name === 'sandFill')!
     expect(top.data).not.toBe(fill.data)
+  })
+})
+
+/**
+ * Chapters own tilesets, palettes and music — levels never do (PRD §12.7).
+ *
+ * Five worlds is five of each. The assertion that matters is the *shape* of
+ * that number: at fifty levels it must still be five to ten, which is only
+ * possible if nothing here is ever keyed by a level id.
+ */
+describe('chapters own the art', () => {
+  test('every world chapter names a tileset that exists', () => {
+    for (const chapter of Object.values(CHAPTERS)) {
+      if (chapter.id === 'test') continue
+      expect(chapter.tileset, `${chapter.id} names no tileset`).toBeDefined()
+      expect(TILESETS[chapter.tileset!], `${chapter.id} names a tileset that is not registered`).toBeDefined()
+    }
+  })
+
+  test('no two chapters share a tileset, and none is orphaned', () => {
+    const named = Object.values(CHAPTERS)
+      .map((c) => c.tileset)
+      .filter((t): t is string => t !== undefined)
+    expect(new Set(named).size).toBe(named.length)
+    expect(new Set(named)).toEqual(new Set(Object.keys(TILESETS)))
+  })
+
+  test('every world has a palette drawn from the master', () => {
+    for (const chapter of Object.values(CHAPTERS)) {
+      for (const colour of chapter.palette) {
+        expect(isMasterColour(colour), `${chapter.id} uses ${colour}`).toBe(true)
+      }
+    }
+  })
+
+  /** Only the Abyss. §7.6's five tiles, and nowhere else in the game. */
+  test('exactly one chapter is dark', () => {
+    const dark = Object.values(CHAPTERS).filter((c) => c.dark !== undefined)
+    expect(dark).toHaveLength(1)
+    expect(dark[0]!.id).toBe('abyss')
+    expect(dark[0]!.dark).toBe(5)
   })
 })
 
@@ -125,8 +193,21 @@ describe('enemy frames', () => {
   })
 
   test('every species has a distinct silhouette', () => {
-    const shapes = ENEMY_FRAMES.map((f) => decode(f).map((p) => (p === 0 ? 0 : 1)).join(''))
+    const shapes = ROSTER_FRAMES.map((f) => `${f.w}x${f.h}:` + decode(f).map((p) => (p === 0 ? 0 : 1)).join(''))
     expect(new Set(shapes).size).toBe(shapes.length)
+  })
+
+  /**
+   * The Lightless is the one sprite drawn to be almost invisible, and the lure
+   * is the only bright thing on it. That is not decoration: the lure is the
+   * only visible part, the only hittable part and the only trigger, and the art
+   * has to say all three at once.
+   */
+  test('the Lightless is mostly the dimmest colour it has', () => {
+    const f = ABYSS_ENEMY_FRAMES.find((s) => s.name === 'lightlessLurking')!
+    const px = [...decode(f)].filter((p) => p !== 0)
+    const dim = px.filter((p) => p === 1).length
+    expect(dim / px.length).toBeGreaterThan(0.8)
   })
 })
 

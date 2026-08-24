@@ -1,4 +1,5 @@
 import { Act, isHeld, isPressed, type InputFrame } from '../engine/input.js'
+import type { Cue } from './cues.js'
 import {
   CHARGED_TIER,
   DISPLAY,
@@ -15,6 +16,7 @@ import {
   centreTile,
   forEachOverlappedTile,
   isGrounded,
+  isSolid,
   moveX,
   moveY,
   overlapsSolid,
@@ -22,6 +24,8 @@ import {
   type Terrain,
 } from './collision.js'
 import { isFluid, Tile, type TileMap } from './tilemap.js'
+import { HAZARDS, UPGRADES } from './constants.js'
+import { hasUpgrade } from './upgrades.js'
 
 const T = DISPLAY.TILE
 
@@ -64,10 +68,55 @@ export interface Player extends Box {
   aimY: number
   aimYFrames: number
   deaths: number
+  /**
+   * Permanent upgrades, as a bitmask. See game/upgrades.ts for why a mask.
+   *
+   * It lives on the player rather than beside him because every one of the five
+   * is a change to what *he* can do, and because the world hash that proves
+   * replay determinism then picks it up for free.
+   */
+  upgrades: number
+  /** Which wall Cling has hold of: -1 left, 1 right, 0 not clinging. */
+  clingDir: number
+  /** Frames of grip used. Past CLING_FRAMES he slides instead of holding. */
+  clingFrames: number
+  /** Grips taken since he last touched the ground. The first is free. */
+  clingsUsed: number
+  /** Frames cooking in superheated water or magma. Death at the limit. */
+  scald: number
+  /** Frames until the next Ink Shot or Ink Bomb may be thrown. */
+  shootCooldown: number
+  /**
+   * Frames Nib has been effectively still.
+   *
+   * Only the abyss reads it (PRD §6.2's pressure crush), but it is cheaper and
+   * more honest to measure movement where movement happens than to have a
+   * hazard reach back into the player's velocity history.
+   */
+  stillFrames: number
 }
 
 export function tierOf(p: Player) {
   return TIERS[p.tier]!
+}
+
+/**
+ * Pips this player can hold right now.
+ *
+ * Tier sets the base and Deep Jet adds one, and those are the only two inputs —
+ * which is the §8.5 rule about upgrades and tiers being different currencies,
+ * expressed as the one function that has to reconcile them.
+ */
+export function inkMax(p: Player): number {
+  return tierOf(p).inkMax + (hasUpgrade(p.upgrades, 'deepJet') ? UPGRADES.DEEP_JET_PIPS : 0)
+}
+
+/** Spend pips if there are pips to spend. Returns false if there were not. */
+export function spendInk(p: Player, cost: number): boolean {
+  if (p.ink < cost) return false
+  p.ink -= cost
+  p.inkTimer = 0
+  return true
 }
 
 export function createPlayer(x: number, y: number): Player {
@@ -97,6 +146,13 @@ export function createPlayer(x: number, y: number): Player {
     aimY: 0,
     aimYFrames: 0,
     deaths: 0,
+    upgrades: 0,
+    clingDir: 0,
+    clingFrames: 0,
+    clingsUsed: 0,
+    scald: 0,
+    shootCooldown: 0,
+    stillFrames: 0,
   }
 }
 
@@ -114,7 +170,7 @@ export function setTier(map: TileMap, p: Player, tier: TierIndex, collapsed?: Re
   p.h = t.h
   p.x = cx - p.w / 2
   p.y = bottom - p.h
-  if (p.ink > t.inkMax) p.ink = t.inkMax
+  if (p.ink > inkMax(p)) p.ink = inkMax(p)
 
   // Growing can leave the taller box inside a ceiling; lift it clear.
   const q = { downward: false, prevBottom: p.y + p.h, collapsed, small: tier === SPENT }
@@ -156,12 +212,12 @@ export function kill(p: Player): void {
 export function promote(map: TileMap, p: Player, max: TierIndex, collapsed?: ReadonlySet<number>): boolean {
   const target = Math.min(p.tier + 1, max) as TierIndex
   if (target === p.tier) {
-    p.ink = tierOf(p).inkMax // already at that tier: refill instead
+    p.ink = inkMax(p) // already at that tier: refill instead
     p.inkTimer = 0
     return false
   }
   setTier(map, p, target, collapsed)
-  p.ink = tierOf(p).inkMax
+  p.ink = inkMax(p)
   p.inkTimer = 0
   return true
 }
@@ -171,10 +227,20 @@ export interface PlayerStepContext {
   collapsed: Set<number>
   /** Tile index -> frames of standing left before it collapses. */
   crumbling: Map<number, number>
-  /** Solid boxes that are not terrain — closed crush clams, for now. */
+  /** Solid boxes that are not terrain — closed clams, hook tops, snail shells. */
   solids?: readonly Box[]
   /** Named sounds this step wants. Filled, never played, by the simulation. */
-  cues?: string[]
+  cues?: Cue[]
+  /**
+   * A rising surface Nib is currently under, resolved by the world.
+   *
+   * Passed in as two booleans rather than as the `Rise` itself, because
+   * hazards.ts already imports the player and the reverse would be a cycle.
+   * The player does not need to know a surface is *rising* — only that he is
+   * underneath water, or underneath magma.
+   */
+  flooded?: boolean
+  inMagma?: boolean
 }
 
 export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFrame): void {
@@ -195,9 +261,12 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   // all is the same input eaten for the same reason. See tests/movement.test.ts.
   if (p.jumpBuffer > 0 && p.dashFrames === 0) p.jumpBuffer--
   if (p.coyote > 0) p.coyote--
+  if (p.shootCooldown > 0) p.shootCooldown--
 
   const wasInWater = p.inWater
-  p.inWater = isFluid(centreTile(map, p))
+  // A rising flood is water the grid does not know about, so it is asked
+  // alongside the tile rather than instead of it.
+  p.inWater = isFluid(centreTile(map, p)) || ctx.flooded === true
   if (p.inWater && !wasInWater) p.vy *= WATER.ENTRY_DAMP
 
   const left = isHeld(input, Act.Left)
@@ -229,9 +298,11 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   if (p.dashFrames > 0) {
     p.dashFrames--
     dashEnding = p.dashFrames === 0
+    releaseCling(p)
   } else if (p.inWater) {
+    releaseCling(p)
     swim(p, dir, ctx.cues)
-  } else {
+  } else if (!cling(ctx, p, dir, tier)) {
     walk(p, input, dir, tier)
     fall(p, input, tier, ctx.cues)
   }
@@ -257,14 +328,33 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   if (grounded) p.jumping = false
   if (grounded && !p.grounded) p.dashCooldown = 0
   if (grounded) p.coyote = PHYSICS.COYOTE_FRAMES
+  // Touching down is what makes the next grip free again, so a wall run has to
+  // be paid for out of pips rather than repeated forever.
+  if (grounded) {
+    p.clingsUsed = 0
+    releaseCling(p)
+  }
   p.grounded = grounded
 
-  checkHazards(map, p)
+  trackStillness(p)
+  checkHazards(ctx, p)
   if (p.y > (map.height + 4) * T) kill(p) // fell out of the world
 }
 
+/**
+ * Nib is "still" when neither axis is really moving.
+ *
+ * Measured against velocity rather than position because a player wedged
+ * against a wall while holding into it is standing still by any honest reading,
+ * and the abyss should say so.
+ */
+function trackStillness(p: Player): void {
+  const moving = Math.abs(p.vx) > HAZARDS.PRESSURE_STILL || Math.abs(p.vy) > HAZARDS.PRESSURE_STILL
+  p.stillFrames = moving ? 0 : p.stillFrames + 1
+}
+
 function refillInk(p: Player): void {
-  const max = tierOf(p).inkMax
+  const max = inkMax(p)
   if (p.ink >= max) {
     p.inkTimer = 0
     return
@@ -276,6 +366,90 @@ function refillInk(p: Player): void {
     p.ink++
     p.inkTimer = 0
   }
+}
+
+/**
+ * Cling — the World 2 upgrade. PRD §8.5.
+ *
+ * Hold into a wall and Nib grips it for sixty frames, then slides. Returns true
+ * when it has taken over the frame's physics, so the caller skips walk and fall
+ * entirely rather than fighting them.
+ *
+ * Two rules do all the design work here. **You must hold into the wall**, so a
+ * cling is never something that happens to you on the way past. And **only the
+ * first grip of an airtime is free** — every later one costs a pip, which is
+ * what makes a cling shaft a route with a budget instead of a free elevator.
+ *
+ * Jumping off is allowed and is not in §8.5. It is here because a wall Nib can
+ * hold and cannot leave reads as a bug, and because World 3's cargo hold is
+ * three storeys: without it, the shaft costs a pip per floor and a Spent player
+ * simply cannot climb it. Recorded in the PRD's decisions log.
+ */
+function cling(ctx: PlayerStepContext, p: Player, dir: number, tier: (typeof TIERS)[number]): boolean {
+  if (!hasUpgrade(p.upgrades, 'cling') || p.grounded) {
+    releaseCling(p)
+    return false
+  }
+
+  const wall = dir !== 0 && wallBeside(ctx, p, dir) ? dir : 0
+  if (wall === 0) {
+    releaseCling(p)
+    return false
+  }
+
+  if (p.clingDir !== wall) {
+    // A fresh grip. The first of this airtime is free; the rest are pips.
+    if (p.clingsUsed > 0 && !spendInk(p, UPGRADES.CLING_REGRIP_COST)) {
+      releaseCling(p)
+      return false
+    }
+    p.clingsUsed++
+    p.clingDir = wall
+    p.clingFrames = 0
+    ctx.cues?.push('clingGrip')
+  }
+
+  p.clingFrames++
+  p.facing = wall as 1 | -1
+
+  if (p.jumpBuffer > 0) {
+    // Off the wall, away from it. The height is an ordinary jump; only the
+    // push-off is the upgrade's.
+    p.vy = tier.jump
+    p.vx = -wall * UPGRADES.CLING_JUMP_X
+    p.jumping = true
+    p.jumpBuffer = 0
+    releaseCling(p)
+    ctx.cues?.push('jump')
+    p.vy = Math.min(p.vy + tier.gravity, PHYSICS.TERMINAL_FALL)
+    return true
+  }
+
+  // Held, then sliding. The slide is the timer made visible: by the time the
+  // player notices they are descending, they have had a second to decide.
+  // The frame the grip runs out gets a sound of its own: the slide is a timer
+  // made visible, and the moment it starts is the one worth hearing.
+  if (p.clingFrames === UPGRADES.CLING_FRAMES + 1) ctx.cues?.push('clingSlip')
+  p.vy = p.clingFrames <= UPGRADES.CLING_FRAMES ? 0 : UPGRADES.CLING_SLIDE
+  p.vx = wall * 0.5 // stay pressed against it through the sweep
+  return true
+}
+
+function releaseCling(p: Player): void {
+  p.clingDir = 0
+  p.clingFrames = 0
+}
+
+/** Is there wall to grip on the given side, at the height of Nib's own box? */
+function wallBeside(ctx: PlayerStepContext, p: Player, dir: number): boolean {
+  const q = { downward: false, prevBottom: p.y + p.h, collapsed: ctx.collapsed }
+  const tx = Math.floor((dir > 0 ? p.x + p.w + 1 : p.x - 1) / T)
+  const top = Math.floor(p.y / T)
+  const bottom = Math.floor((p.y + p.h - 1) / T)
+  for (let ty = top; ty <= bottom; ty++) {
+    if (isSolid(ctx.map, tx, ty, q)) return true
+  }
+  return false
 }
 
 function tryStartDash(p: Player, input: InputFrame): void {
@@ -293,11 +467,15 @@ function tryStartDash(p: Player, input: InputFrame): void {
   dx /= len
   dy /= len
 
-  const speed = p.inWater ? INK.DASH_SPEED_WATER : INK.DASH_SPEED
+  // Deep Jet is a faster jet on a shorter recharge, not a different dash. It
+  // changes how often and how far, never what the dash does on contact — that
+  // belongs to the Charged tier, and the two are kept apart on purpose (§8.5).
+  const jet = hasUpgrade(p.upgrades, 'deepJet')
+  const speed = (p.inWater ? INK.DASH_SPEED_WATER : INK.DASH_SPEED) + (jet ? UPGRADES.DEEP_JET_SPEED : 0)
   p.ink -= INK.DASH_COST
   p.inkTimer = 0
   p.dashFrames = INK.DASH_LOCK_FRAMES
-  p.dashCooldown = INK.DASH_LOCK_FRAMES + INK.DASH_COOLDOWN
+  p.dashCooldown = INK.DASH_LOCK_FRAMES + (jet ? UPGRADES.DEEP_JET_COOLDOWN : INK.DASH_COOLDOWN)
   p.vx = dx * speed
   p.vy = dy * speed
   p.iframes = Math.max(p.iframes, INK.DASH_IFRAMES)
@@ -323,7 +501,7 @@ function walk(p: Player, input: InputFrame, dir: number, tier: (typeof TIERS)[nu
   p.vx = approach(p.vx, dir * max, accel)
 }
 
-function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?: string[]): void {
+function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?: Cue[]): void {
   if (p.jumpBuffer > 0 && (p.grounded || p.coyote > 0)) {
     p.vy = tier.jump
     p.grounded = false
@@ -344,7 +522,7 @@ function fall(p: Player, input: InputFrame, tier: (typeof TIERS)[number], cues?:
   p.vy = Math.min(p.vy + tier.gravity, PHYSICS.TERMINAL_FALL)
 }
 
-function swim(p: Player, dir: number, cues?: string[]): void {
+function swim(p: Player, dir: number, cues?: Cue[]): void {
   if (p.jumpBuffer > 0) {
     p.vy = WATER.SWIM_STROKE
     p.jumpBuffer = 0
@@ -371,12 +549,47 @@ function applyCurrents(map: TileMap, p: Player): void {
   p.vy += fy
 }
 
-function checkHazards(map: TileMap, p: Player): void {
+/**
+ * Terrain that kills, and the one upgrade that argues with it.
+ *
+ * Urchins are absolute — no tier and no upgrade has ever survived a spike, and
+ * that is what makes "geometry kills, creatures cost" a rule a player can
+ * learn once. Heat is the deliberate exception, and it is an exception with a
+ * clock rather than an exemption: Heat Shell makes superheated water safe and
+ * buys ninety frames of magma, which is enough to cross one and not enough to
+ * live in it.
+ */
+function checkHazards(ctx: PlayerStepContext, p: Player): void {
   let deadly = false
-  forEachOverlappedTile(map, p, (t) => {
+  let cooking = false
+  const shell = hasUpgrade(p.upgrades, 'heatShell')
+
+  // Molten rock that arrived as a rising surface burns exactly like molten rock
+  // that was authored into the grid. Same grace, same clock, same death.
+  if (ctx.inMagma === true) {
+    if (shell) cooking = true
+    else deadly = true
+  }
+
+  forEachOverlappedTile(ctx.map, p, (t) => {
     if (t === Tile.HAZARD) deadly = true
+    else if (t === Tile.MAGMA) {
+      if (shell) cooking = true
+      else deadly = true
+    } else if (t === Tile.HOT && !shell) cooking = true
   })
-  // Hazards ignore tiers entirely: geometry kills, creatures cost.
+
+  if (cooking) {
+    p.scald++
+    // Magma spends the same grace faster than hot water does, because standing
+    // in the fire is not the same act as swimming near it.
+    const limit = shell ? UPGRADES.MAGMA_GRACE : HAZARDS.SCALD_FRAMES
+    if (p.scald >= limit) deadly = true
+  } else if (p.scald > 0) {
+    // Surfacing resets it, but not instantly: crossing in stages is the lesson.
+    p.scald = Math.max(0, p.scald - HAZARDS.SCALD_RECOVER)
+  }
+
   if (deadly) kill(p)
 }
 

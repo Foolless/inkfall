@@ -147,6 +147,33 @@ describe('a save from a newer build', () => {
   })
 })
 
+describe('a migration that fails is survivable', () => {
+  /**
+   * The ladder throwing is tested directly below; this is the same failure
+   * arriving through `loadSave`, which is the only path a player ever takes.
+   * The rule is the same as for an unparseable blob: fall back to defaults,
+   * keep the original as `.bak`, and never clear the key.
+   */
+  test('loadSave falls back to defaults and keeps the original', () => {
+    // Version 0, so the ladder actually has a rung to climb.
+    const blob = JSON.stringify({ version: 0, progress: { cleared: ['w01-tidepools'] } })
+    const storage = new FakeStorage({ [SAVE_KEY]: blob })
+    const broken: Record<number, Migration> = {
+      0: () => {
+        throw new Error('version 0 save failed to migrate')
+      },
+    }
+
+    const result = loadSave(storage, broken)
+    expect(result.status).toBe('corrupt')
+    expect(result.writable).toBe(false)
+    expect(result.data).toEqual(defaultSave())
+    expect(result.message).toMatch(/backup/i)
+    expect(storage.items.get(SAVE_KEY)).toBe(blob)
+    expect(storage.items.get(BACKUP_KEY)).toBe(blob)
+  })
+})
+
 describe('migration', () => {
   const ladder: Record<number, Migration> = {
     1: (raw) => ({ ...raw, version: 2, progress: { ...(raw.progress as object), upgrades: ['inkShot'] } }),

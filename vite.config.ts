@@ -17,6 +17,7 @@ export default defineConfig({
       input: {
         main: here('index.html'),
         spriteEditor: here('tools/sprite-editor/index.html'),
+        levelEditor: here('tools/level-editor/index.html'),
       },
     },
   },
@@ -24,6 +25,12 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // `--expose-gc`, so tests/performance.test.ts can measure heap growth
+    // rather than the garbage collector's mood. Checkpoint 4.8 asks for zero
+    // allocations in the update loop; this is how that gets checked instead of
+    // asserted in a comment.
+    poolOptions: { forks: { execArgv: ['--expose-gc'] } },
+    pool: 'forks',
     coverage: {
       provider: 'v8',
       include: ['src/game/**', 'src/engine/loop.ts', 'src/engine/input.ts', 'src/content/**'],

@@ -1,17 +1,53 @@
 import { createAnim, updateAnim } from './engine/anim.js'
 import { createCamera, updateCamera } from './engine/camera.js'
 import { DebugOverlay } from './engine/debug.js'
-import { Keyboard } from './engine/input.js'
+import { DEFAULT_BINDS, Keyboard } from './engine/input.js'
 import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
-import { levelDef, tidepools } from './content/levels/index.js'
+import { campaign, levelDef, loadoutOnArrival } from './content/levels/index.js'
 import { bossCameraLock } from './game/world.js'
-import { createSession, updateSession } from './game/state.js'
+import {
+  applyAssist,
+  createSession,
+  nextLevel,
+  rebuild,
+  restartLevel,
+  setAssist,
+  updateSession,
+} from './game/state.js'
+import type { LevelDef } from './content/levels/format.js'
 import { kill } from './game/player.js'
-import { loadSave, recordClear, recordHighScore, writeSave, type SaveData } from './engine/save.js'
-import { Audio, type Cue } from './engine/audio/sfx.js'
+import {
+  checkUnlocks,
+  defaultSave,
+  loadSave,
+  recordClear,
+  recordHighScore,
+  recordUnlock,
+  recordUpgrades,
+  totalPearls,
+  writeSave,
+  type SaveData,
+} from './engine/save.js'
+import { loadGhost, writeGhost } from './engine/ghosts.js'
+import { updateJuice } from './engine/juice.js'
+import { clearTelemetry, loadTelemetry, writeTelemetry } from './engine/playtest.js'
+import {
+  createTelemetry,
+  formatReport,
+  observe,
+  recordAttempt,
+  recordClear as recordPlaytestClear,
+  report,
+} from './game/telemetry.js'
+import { bindsFrom, OPTION_ROWS, rebind } from './game/options.js'
+import { idsOf, maskOf } from './game/upgrades.js'
+import { Audio } from './engine/audio/sfx.js'
 import { trackFor } from './content/music/world1.js'
 import { chapterOf } from './content/chapters.js'
+
+/** Shared empty list, so a paused frame allocates nothing to say "no cues". */
+const NO_CUES: readonly import('./game/cues.js').Cue[] = []
 
 const canvas = document.getElementById('game')
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing')
@@ -28,26 +64,7 @@ keyboard.attach(window)
 // box is a development tool and not content.
 const params = new URLSearchParams(window.location.search)
 const requested = params.get('level')
-const level = requested === null ? tidepools : levelDef(requested)
-
-const session = createSession(level)
-const audio = new Audio()
-
-/**
- * Audio cannot start until the player has touched something (PRD §10.4), which
- * is exactly what the title screen's "PRESS SPACE" is for. Everything before
- * that point queues nothing and simply makes no sound.
- */
-function startAudio(): void {
-  if (audio.started) return
-  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!Ctor) return
-  audio.start(new Ctor())
-  const track = trackFor(chapterOf(level.chapter).music)
-  if (track) audio.playMusic(track)
-}
-window.addEventListener('keydown', startAudio, { once: true })
-window.addEventListener('pointerdown', startAudio, { once: true })
+const startLevel = requested === null ? campaign()[0]! : levelDef(requested)
 
 // Progress is loaded once at boot. `writable` is false when the file was
 // unreadable or came from a newer build — in both cases the game is playable
@@ -57,6 +74,68 @@ let save: SaveData = loaded.data
 const canWrite = loaded.writable
 if (loaded.message) showToast(loaded.message)
 
+// Upgrades are permanent (§8.5), so a run starts with whatever the save says
+// this player has already earned — including on a second playthrough.
+const session = createSession(startLevel, {
+  // Everything earned, plus everything a player reaching this level the normal
+  // way is guaranteed to be holding (§8.5's table, derived from the campaign
+  // order). Without the second half, `?level=w02-kelp` on a fresh save opens
+  // in a room whose first obstacle is a kelp knot only the Ink Shot cuts —
+  // the debug route landing a player in a level they cannot leave.
+  upgrades: maskOf(save.progress.upgrades) | maskOf(loadoutOnArrival(startLevel.id)),
+  assist: save.settings.assistMode,
+  // Read live rather than snapshotted: the save is replaced on every clear,
+  // and a pearl banked in World 2 must be known by the time World 2 is
+  // replayed later in the same sitting.
+  foundPearls: (id) => save.progress.pearls[id] ?? [],
+  // The map reads the save every time it opens, so a level cleared this
+  // session unlocks the next one without a reload.
+  progress: () => ({
+    unlocked: save.progress.unlocked,
+    cleared: save.progress.cleared,
+    pearls: save.progress.pearls,
+    bestTimes: save.records.bestTimes[save.characters.selected] ?? {},
+  }),
+  // A level named on the debug route is entered directly: `?level=w03-ship`
+  // means that level, not the map's idea of where the player got to.
+  direct: requested !== null,
+  timerDisplay: save.settings.timerDisplay,
+})
+const audio = new Audio()
+
+/**
+ * Playtest telemetry (PLAN.md Gate 3). Observes; never steers.
+ *
+ * Kept in memory for the sitting and mirrored to its own storage key, so a
+ * playthrough spread over an evening adds up instead of resetting with the tab.
+ * Read it with `__inkfall.report()`, or copy it with `__inkfall.copyReport()`.
+ */
+const telemetry = loadTelemetry(window.localStorage) ?? createTelemetry(new Date().toISOString().slice(0, 16))
+let watched: { deaths: number; tier: number } | null = null
+
+/**
+ * Audio cannot start until the player has touched something (PRD §10.4), which
+ * is exactly what the title screen's "PRESS SPACE" is for. Everything before
+ * that point queues nothing and simply makes no sound.
+ *
+ * The theme follows the *chapter*, so crossing into a new world changes the
+ * track without anything here knowing which levels exist.
+ */
+function startAudio(): void {
+  if (audio.started) return
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctor) return
+  audio.start(new Ctor())
+  playChapterTheme()
+}
+function playChapterTheme(): void {
+  if (!audio.started) return
+  const track = trackFor(chapterOf(session.level.chapter).music)
+  if (track) audio.playMusic(track)
+}
+window.addEventListener('keydown', startAudio, { once: true })
+window.addEventListener('pointerdown', startAudio, { once: true })
+
 function showToast(message: string): void {
   const el = document.getElementById('toast')
   if (!el) return
@@ -65,23 +144,172 @@ function showToast(message: string): void {
   window.setTimeout(() => (el.hidden = true), 8_000)
 }
 
-function persist(): void {
+/**
+ * Bank whatever the session says is worth banking.
+ *
+ * Called with the level that was *just* finished, because by the time the flag
+ * is seen the session has already moved on to the next one — clearing World 2
+ * and finding yourself in World 3 is one frame, and the pearls belong to the
+ * world behind you.
+ */
+function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number, cleared: boolean): void {
   if (!canWrite) return
-  save = recordClear(save, level.id, {
-    pearls: session.world.pearls,
-    seconds: session.levelFrames / 60,
-  })
+
+  // Upgrades first: they are the thing whose loss would cost the most, and
+  // they are banked even when nothing else about the run is worth recording.
+  if (session.granted.length > 0) {
+    save = recordUpgrades(save, session.granted)
+    session.granted.length = 0
+  }
+
+  // Everything below is about a level that was *finished*. Deep Jet flags a
+  // save mid-level, and treating that as a clear unlocked the next world and
+  // wrote a partial time in as a personal best.
+  if (!cleared) {
+    writeSave(window.localStorage, save)
+    return
+  }
+
+  save = recordClear(save, finished.id, { pearls, seconds })
+  const next = nextLevel(finished.id)
+  if (next) save = recordUnlock(save, next.id)
+  // The fifteenth pearl is worth something (§8.3), and it can be the last one
+  // found on any level — so this is checked on every clear, not on the last.
+  save = checkUnlocks(save)
+  writeSave(window.localStorage, save)
+}
+
+/**
+ * Load the ghost for whatever level is about to be played, if ghosts are on.
+ *
+ * Read at the start of a level rather than held for the session: the player can
+ * pick any level from the map, and the silhouette has to belong to the one they
+ * picked. A failure to read one is not an error — it just means no ghost.
+ */
+function loadGhostForLevel(): void {
+  session.ghost = save.settings.ghost ? loadGhost(window.localStorage, save.characters.selected, session.level.id) : null
+}
+
+/**
+ * Store a ghost the session says is a personal best.
+ *
+ * Kept apart from `persist` because it writes to a different key for a
+ * different reason: a quota error while storing a few thousand coordinates
+ * must never be able to take somebody's pearls with it.
+ */
+function bankGhost(): void {
+  const track = session.pendingGhost
+  session.pendingGhost = null
+  if (!track || !canWrite) return
+  writeGhost(window.localStorage, save.characters.selected, track)
+}
+
+/**
+ * The run's entry on the board, written once when the run ends.
+ *
+ * §8.2's table is the top ten *runs*. Writing on every level clear filled it
+ * with five partial snapshots of the same playthrough instead.
+ */
+function bankScore(): void {
+  if (!canWrite) return
   save = recordHighScore(save, {
     score: session.score,
     character: save.characters.selected,
     date: new Date().toISOString().slice(0, 10),
     levelsCleared: save.progress.cleared.length,
-    deaths: session.world.player.deaths,
+    deaths: session.deaths,
   })
   writeSave(window.localStorage, save)
 }
 
+/**
+ * Everything the options screen does. §11.1 and §13.
+ *
+ * Driven from raw key events rather than through the action masks, for one
+ * reason that decides the whole design: while a bind row is listening, *every*
+ * key has to stop meaning what it usually means — including the ones that
+ * would otherwise move the cursor off the row being rebound.
+ */
+function stepOptions(e: KeyboardEvent): boolean {
+  if (session.screen !== 'options') return false
+  const state = session.options
+
+  if (state.listening !== null) {
+    e.preventDefault()
+    if (e.code === 'Escape') {
+      state.listening = null
+      return true
+    }
+    // Anything else becomes the binding, including keys the game already uses:
+    // taking a key off whatever held it is `rebind`'s job, and refusing the
+    // press would leave a player stuck on a row with no way out but Escape.
+    applySettings(rebind(save.settings, state.listening.slice('bind.'.length), e.code))
+    state.listening = null
+    return true
+  }
+
+  const row = OPTION_ROWS[state.cursor]
+  switch (e.code) {
+    case 'Escape':
+      session.screen = session.optionsFrom
+      session.uiFrames = 0
+      break
+    case 'ArrowUp':
+    case 'KeyW':
+      state.cursor = Math.max(0, state.cursor - 1)
+      break
+    case 'ArrowDown':
+    case 'KeyS':
+      state.cursor = Math.min(OPTION_ROWS.length - 1, state.cursor + 1)
+      break
+    case 'ArrowLeft':
+    case 'KeyA':
+      if (row?.adjust) applySettings(row.adjust(save.settings, -1))
+      break
+    case 'ArrowRight':
+    case 'KeyD':
+      if (row?.adjust) applySettings(row.adjust(save.settings, 1))
+      break
+    case 'Space':
+    case 'Enter':
+      if (row?.kind === 'bind') state.listening = row.id
+      else if (row?.id === 'reset') applySettings(defaultSave().settings)
+      else if (row?.adjust) applySettings(row.adjust(save.settings, 1))
+      break
+    default:
+      return false
+  }
+  e.preventDefault()
+  return true
+}
+
+/**
+ * Store a settings change and make it take effect immediately.
+ *
+ * Immediately matters for every row on the screen: a volume slider you cannot
+ * hear, or a light radius that waits for the next level, is a control that
+ * looks broken while it is working.
+ */
+function applySettings(next: SaveData['settings']): void {
+  save = { ...save, settings: next }
+  // Both halves of Assist Mode, or neither. Setting only the session's flag
+  // handed a paused player unlimited lives while the enemies around them
+  // stayed at classic speed — a difficulty nobody picked, from a menu row that
+  // looked like it had worked.
+  applyAssist(session, next.assistMode)
+  session.timerDisplay = next.timerDisplay
+  keyboard.setBinds(bindsFrom(next, DEFAULT_BINDS))
+  audio.configure({ musicVolume: next.musicVolume, sfxVolume: next.sfxVolume })
+  renderer.settings = next
+  if (canWrite) writeSave(window.localStorage, save)
+}
+
 window.addEventListener('keydown', (e) => {
+  if (stepOptions(e)) {
+    // The options screen consumed it, so the simulation must not also see it.
+    keyboard.flush()
+    return
+  }
   if (e.code === 'F1') {
     e.preventDefault()
     debug.toggle()
@@ -92,11 +320,34 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyR' && session.screen === 'playing') {
     e.preventDefault()
-    session.world = createSession(level).world
-    session.levelFrames = 0
-    session.deathsCharged = session.world.player.deaths
+    // Through the session rather than by hand: a restart has to reset the
+    // clock, the tally flags and the ghost recorder, and the hand-rolled
+    // version here reset the first of those and left a recording running.
+    restartLevel(session)
+  }
+  // Assist Mode is a title-screen switch and a saved setting (PRD §13). On one
+  // key, next to the label that names it, because the player who needs it is
+  // the least likely to go hunting through a menu for it.
+  //
+  // `A` is also the WASD binding for Left, so this must not touch the event
+  // unless it actually toggled — `setAssist` refuses anywhere but the title and
+  // the game-over screen, and swallowing the key mid-level would eat a step.
+  if (e.code === 'KeyA' && setAssist(session, !session.assist)) {
+    e.preventDefault()
+    if (!canWrite) return
+    save = { ...save, settings: { ...save.settings, assistMode: session.assist } }
+    writeSave(window.localStorage, save)
   }
 })
+
+// Everything the save already holds, applied before the first frame: bindings,
+// volumes, the timer, the light radius, Assist Mode.
+applySettings(save.settings)
+
+/** The level's conches as tile columns, ascending — telemetry's section cuts. */
+function checkpointColumns(w: typeof session.world): number[] {
+  return w.checkpointBoxes.map((c) => Math.floor(c.box.x / 16)).sort((a, b) => a - b)
+}
 
 const fit = () => renderer.resize(window.innerWidth, window.innerHeight)
 window.addEventListener('resize', fit)
@@ -106,16 +357,94 @@ startLoop({
   update: () => {
     const input = keyboard.snapshot()
     const screenBefore = session.screen
+    const levelBefore = session.level
+    // Snapshot what the finishing level is owed, before the session advances.
+    const owed = {
+      pearls: [...session.world.pearls],
+      seconds: session.levelFrames / 60,
+    }
+
     updateSession(session, input)
-    for (const cue of session.world.cues) audio.play(cue as Cue)
+    // Only when the world actually stepped. `cues` is cleared inside
+    // `world.update`, so on a paused, cleared or game-over screen the last
+    // simulated frame's cues sat there and re-fired sixty times a second.
+    const stepped = session.screen === 'playing'
+    if (stepped) for (const cue of session.world.cues) audio.play(cue)
     if (session.screen !== screenBefore) audio.play('menu')
     if (session.pendingSave) {
       session.pendingSave = false
-      persist()
+      // A level is only *finished* when the session says so, and it says so with
+      // its own flag. Deep Jet raises `pendingSave` mid-level to bank the
+      // upgrade the instant it is picked up (§8.5); treating that as a clear
+      // unlocked the next world and wrote a partial-run time in as the PB.
+      const cleared = session.pendingClear
+      session.pendingClear = false
+      persist(levelBefore, owed.pearls, owed.seconds, cleared)
     }
+    if (session.pendingScore) {
+      session.pendingScore = false
+      bankScore()
+    }
+    if (session.pendingGhost) bankGhost()
+    // A new world is a new chapter, and a chapter owns the music. Also on the
+    // way out of the map, where the player may have picked any world at all.
+    if (session.level !== levelBefore || (screenBefore === 'worldMap' && session.screen === 'playing')) {
+      playChapterTheme()
+    }
+    // A level just started, from the map or from the level before it.
+    if (session.screen === 'playing' && screenBefore !== 'playing' && screenBefore !== 'paused') {
+      loadGhostForLevel()
+      recordAttempt(telemetry, session.level.id)
+    }
+    if (session.screen === 'levelClear' && screenBefore === 'playing') {
+      recordPlaytestClear(telemetry, levelBefore.id, owed.pearls.filter(Boolean).length)
+      writeTelemetry(window.localStorage, telemetry)
+    }
+    // Telemetry, before the juice: it wants where the player was on the last
+    // frame they were alive, and the juice does not care either way.
+    if (session.screen === 'playing') {
+      const w = session.world
+      observe(
+        telemetry,
+        {
+          level: session.level.id,
+          checkpoints: checkpointColumns(w),
+          widthTiles: w.map.width,
+          x: w.player.x,
+          y: w.player.y,
+          tile: 16,
+          deaths: w.player.deaths,
+          tier: w.player.tier,
+          assist: session.assist,
+        },
+        watched,
+      )
+      watched = { deaths: w.player.deaths, tier: w.player.tier }
+    } else {
+      watched = null
+    }
+
     // Animation advances on the simulation step, not the render, so a cycle
-    // never speeds up on a fast display or stutters on a slow one.
+    // never speeds up on a fast display or stutters on a slow one. The juice
+    // rides along for the same reason — and, unlike the animation, it is fed
+    // the cues the world just raised rather than reading the world itself.
     updateAnim(anim, session.world.player)
+    const p = session.world.player
+    updateJuice(
+      renderer.juice,
+      {
+        cues: stepped ? session.world.cues : NO_CUES,
+        x: p.x,
+        y: p.y,
+        w: p.w,
+        h: p.h,
+        grounded: p.grounded,
+        vy: p.vy,
+        tier: p.tier,
+        alive: p.alive,
+      },
+      save.settings.screenShake,
+    )
   },
   render: (frameTimeMs) => {
     debug.sample(frameTimeMs)
@@ -123,7 +452,8 @@ startLoop({
     // sees is a stutter everybody hears.
     audio.update()
     updateCamera(camera, session.world.player, session.world.map, bossCameraLock(session.world))
-    renderer.draw(session, camera, anim)
+    renderer.scores = save.records.highScores
+    renderer.draw(session, camera, anim, totalPearls(save))
     debug.draw(renderer.ctx, session.world, camera)
   },
 })
@@ -140,6 +470,16 @@ declare global {
       lives: () => number
       score: () => number
       pearls: () => number
+      level: () => string
+      upgrades: () => string[]
+      assist: () => boolean
+      worldAssist: () => boolean
+      setAssist: (on: boolean) => boolean
+      optionRows: () => string[]
+      listening: () => string | null
+      report: () => string
+      reportData: () => unknown
+      resetReport: () => void
       reset: () => void
       kill: () => void
       clear: () => void
@@ -156,7 +496,7 @@ window.__inkfall = {
   lives: () => session.lives,
   score: () => session.score + session.world.score,
   reset: () => {
-    session.world = createSession(level).world
+    session.world = rebuild(session, session.level)
     session.deathsCharged = 0
   },
   kill: () => {
@@ -174,6 +514,29 @@ window.__inkfall = {
     session.world.player.vx = 0
     session.world.player.vy = 0
   },
-  pearls: () => save.progress.pearls[level.id]?.filter(Boolean).length ?? 0,
+  pearls: () => save.progress.pearls[session.level.id]?.filter(Boolean).length ?? 0,
+  level: () => session.level.id,
+  upgrades: () => idsOf(session.upgrades),
+  assist: () => session.assist,
+  // Assist lives in two places — the run's lives and the world's enemies — and
+  // the pair is the thing worth being able to look at from a test.
+  worldAssist: () => session.world.assist,
+  setAssist: (on: boolean) => setAssist(session, on),
+  optionRows: () => OPTION_ROWS.map((r) => r.id),
+  listening: () => session.options.listening,
+  // The playtest log, for Gate 3. Printed rather than returned as an object so
+  // it can be read straight out of a console and pasted into an issue.
+  report: () => {
+    const text = formatReport(report(telemetry))
+    // eslint-disable-next-line no-console
+    console.log(text)
+    return text
+  },
+  reportData: () => report(telemetry),
+  resetReport: () => {
+    telemetry.sections.clear()
+    telemetry.levels.clear()
+    clearTelemetry(window.localStorage)
+  },
   audio: () => ({ started: audio.started, playing: audio.nowPlaying, muted: audio.muted }),
 }

@@ -12,14 +12,28 @@ export const Tile = {
   CURRENT_U: 8,
   CURRENT_D: 9,
   SLICK: 10,
+  /** Solid until an Ink Bomb or a Charged dash opens it. PRD §8.5. */
+  CRACKED: 11,
+  /** Solid until Heat Shell lets Nib walk through it. PRD §8.5. */
+  FUSED: 12,
+  /** Molten rock. Instant death, and Heat Shell buys only 90 frames of it. */
+  MAGMA: 13,
+  /** Superheated water. Swimmable, on a scald timer. */
+  HOT: 14,
+  /** A kelp knot. Solid until an Ink Shot bolt breaks it open. */
+  KNOT: 15,
   /**
    * A crack only Spent Nib fits through. PRD §7.1's small-only passages.
    *
    * A rule rather than geometry, and deliberately so: at 16px tiles a 12x14
    * hitbox fits any one-tile opening, so "small enough to squeeze through"
    * cannot be expressed by the grid alone. See PRD §16.
+   *
+   * Distinct from `CRACKED`, which is a *bomb wall*. The two arrived on
+   * separate branches both calling themselves `x`; this one is `n`, for
+   * narrow, because four levels are authored against the other one.
    */
-  CRACK: 11,
+  CRACK: 16,
 } as const
 export type TileId = (typeof Tile)[keyof typeof Tile]
 
@@ -36,7 +50,12 @@ export const LEGEND: Record<string, TileId> = {
   u: Tile.CURRENT_U,
   d: Tile.CURRENT_D,
   '=': Tile.SLICK,
-  x: Tile.CRACK,
+  x: Tile.CRACKED,
+  f: Tile.FUSED,
+  k: Tile.KNOT,
+  m: Tile.MAGMA,
+  h: Tile.HOT,
+  n: Tile.CRACK,
 }
 
 /**
@@ -150,5 +169,29 @@ export function isCurrent(t: TileId): boolean {
  * and the honest model.
  */
 export function isFluid(t: TileId): boolean {
-  return t === Tile.WATER || isCurrent(t)
+  return t === Tile.WATER || t === Tile.HOT || isCurrent(t)
+}
+
+/**
+ * Terrain an upgrade opens. PRD §8.5.
+ *
+ * Three kinds for three upgrades, and the symmetry is the point: a kelp knot
+ * yields to an **Ink Shot**, a cracked wall to an **Ink Bomb**, heat-fused
+ * debris to a **Heat Shell**. A player who meets one knows immediately which
+ * of the things they are carrying is the answer, and a player who does not
+ * have it yet knows there is something to come back for.
+ *
+ * All three are solid until the right thing happens to them, and all three
+ * are expressed the same way at runtime: the tile joins the world's
+ * `collapsed` set, which is already the answer to "is this tile currently not
+ * solid". Reusing that rather than threading a loadout through the collision
+ * sweep is what keeps `isSolid` a function of the map and one set.
+ */
+export function isBreakable(t: TileId): boolean {
+  return t === Tile.CRACKED || t === Tile.FUSED || t === Tile.KNOT
+}
+
+/** Tiles that burn. Heat Shell is the only thing that survives either. */
+export function isHeat(t: TileId): boolean {
+  return t === Tile.MAGMA || t === Tile.HOT
 }

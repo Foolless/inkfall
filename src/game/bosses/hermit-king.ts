@@ -19,73 +19,24 @@
 
 import { BOSS, DISPLAY } from '../constants.js'
 import { moveX, moveY, type Box } from '../collision.js'
+import { baseBoss, isVulnerable, phaseOf, type Boss, type BossStepContext, type Rock } from './types.js'
 import type { TileMap } from '../tilemap.js'
 
 const T = DISPLAY.TILE
-
-export type BossState = 'waking' | 'idle' | 'charging' | 'exposed' | 'throwing' | 'dying' | 'dead'
-
-export interface Boss extends Box {
-  id: string
-  state: BossState
-  /** Frames left in the current state. */
-  timer: number
-  /** Hits landed. Three ends him; the phase is derived from this. */
-  hits: number
-  vx: number
-  vy: number
-  facing: 1 | -1
-  /** Alternates charge and throw from Phase 2 on, so the pattern is learnable. */
-  beat: number
-  /** True once Phase 3's Snappers have been let out. Only ever happens once. */
-  spawnedGuards: boolean
-}
-
-export interface Rock extends Box {
-  vx: number
-  vy: number
-  alive: boolean
-}
 
 /** Wide and low, and a good deal smaller than the sprite that draws him. */
 export const HERMIT_SIZE = { w: 44, h: 28 }
 
 export function spawnHermitKing(arena: Box): Boss {
-  return {
-    id: 'hermitKing',
+  const b = baseBoss('hermitKing', {
     x: arena.x + arena.w - HERMIT_SIZE.w - T,
     // On the arena floor, which is the arena box's own bottom edge.
     y: arena.y + arena.h - HERMIT_SIZE.h,
     w: HERMIT_SIZE.w,
     h: HERMIT_SIZE.h,
-    state: 'waking',
-    timer: BOSS.WAKE_FRAMES,
-    hits: 0,
-    vx: 0,
-    vy: 0,
-    facing: -1,
-    beat: 0,
-    spawnedGuards: false,
-  }
-}
-
-/** 1, 2 or 3. Derived from the hit count so the two can never disagree. */
-export function phaseOf(b: Boss): 1 | 2 | 3 {
-  return Math.min(3, b.hits + 1) as 1 | 2 | 3
-}
-
-/** Only the exposed back can be stomped. Everything else costs a tier. */
-export function isVulnerable(b: Boss): boolean {
-  return b.state === 'exposed'
-}
-
-export interface BossStepContext {
-  map: TileMap
-  arena: Box
-  player: Box
-  rocks: Rock[]
-  /** Called once when Phase 3 begins, to let the Snappers out. */
-  summonGuards: () => void
+  })
+  b.timer = BOSS.WAKE_FRAMES
+  return b
 }
 
 export function updateHermitKing(ctx: BossStepContext, b: Boss): void {

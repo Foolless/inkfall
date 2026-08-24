@@ -1,6 +1,7 @@
 import { Act, frameFromMasks, type InputFrame } from '../src/engine/input.js'
 import { DISPLAY, PHYSICS } from '../src/game/constants.js'
-import { createWorld, update, type LevelDef, type World } from '../src/game/world.js'
+import { createWorld, update, type LevelDef, type World, type WorldOptions } from '../src/game/world.js'
+import { maskOf, type UpgradeId } from '../src/game/upgrades.js'
 import type { EntityDef } from '../src/content/levels/format.js'
 
 export const TILE = DISPLAY.TILE
@@ -19,8 +20,21 @@ export function levelFrom(tiles: string[], id = 'test', entities: readonly Entit
   return { id, name: id, chapter: 'test', order: 0, tiles, entities }
 }
 
-export function worldWith(tiles: string[], entities: readonly EntityDef[] = []): World {
-  return createWorld(levelFrom(tiles, 'test', entities))
+export function worldWith(
+  tiles: string[],
+  entities: readonly EntityDef[] = [],
+  options: WorldOptions = {},
+): World {
+  return createWorld(levelFrom(tiles, 'test', entities), options)
+}
+
+/** A world where Nib already holds the named upgrades. */
+export function worldWithUpgrades(
+  tiles: string[],
+  upgrades: readonly UpgradeId[],
+  entities: readonly EntityDef[] = [],
+): World {
+  return worldWith(tiles, entities, { upgrades: maskOf(upgrades) })
 }
 
 /** Drop the player onto the ground so tests start from a settled state. */

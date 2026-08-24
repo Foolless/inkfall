@@ -5,9 +5,15 @@
 Companion to [PRD.md](PRD.md), which says *what* the game is. This says how it gets built,
 in what order, and how we know each piece actually works.
 
-**Status:** Phase 1 complete and deployed — Gate 1 run once, one finding fixed, awaiting a re-test
+**Status:** ✅ Gate 1 **passed** on re-test — the up-dash fix landed and the grey box is fun
 ✅ Phase 2 built — awaiting Gate 2
-**Last updated:** 2026-08-23
+✅ Phase 3 built — all five worlds, four new bosses, five upgrades
+🚦 Gate 3 **failed on round one**: the game was not finishable. Assist Mode is built in
+response (PRD §13, pulled forward from 4.7)
+✅ **Phase 4 built** — all nine checkpoints. The game is feature-complete: pearls, scoring,
+speedrun timers and ghosts, the world map, the full SFX roster, juice, options and
+accessibility. Gates 2, 3 and 4 are what remain, and all three need people
+**Last updated:** 2026-08-24
 
 ---
 
@@ -40,10 +46,10 @@ smoke test and human eyes. Chasing coverage through draw calls is wasted effort.
 
 | Phase | What it produces | Exit gate | Rough effort |
 |---|---|---|---|
-| **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — *round 1 done, one fix applied, re-testing* | 8–12 days |
+| **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — ✅ *passed on re-test* | 8–12 days |
 | **2 · One Real Level** ✅ | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min — *pending* | 12–18 days |
-| **3 · All Five Levels** | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier | 20–30 days |
-| **4 · Meta & Ship** | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB | 15–22 days |
+| **3 · All Five Levels** ✅ | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier — *round 1 failed, Assist Mode built, re-testing* | 20–30 days |
+| **4 · Meta & Ship** ✅ | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB — *pending* | 15–22 days |
 
 **Total: roughly 55–80 focused days**, solo. That is *focused* days, not calendar days —
 scale to your actual availability. The estimates assume the PRD is not relitigated mid-build;
@@ -59,9 +65,11 @@ checkpoint rather than an afterthought.
 
 > **Goal:** prove the ink dash is fun before a single sprite or enemy exists.
 
-**Built.** All nine checkpoints are green on `main`: 164 unit tests, 4 browser
+**Built, and gated.** All nine checkpoints are green on `main`: 164 unit tests, 4 browser
 smoke tests, 98% statement coverage of the simulation core, 11 kB gzipped.
-Gate 1 is the remaining step, and it needs three humans.
+**Gate 1 passed on its re-test** — the three changes below fixed the round-one
+finding, and the ink dash is fun with nothing around it. That was the one gate
+that could have stopped the project.
 
 ### What the tests changed
 
@@ -184,6 +192,11 @@ safe. If two rounds of tuning don't pass it, the ink dash is the wrong core mech
 PRD's rejected alternatives (tentacle grapple, suction cling) are on the table. Failing here
 costs ten days. Failing at Phase 4 costs eighty.
 
+**✅ Passed, round two.** Round one's finding was discoverability, not capability;
+the three changes above fixed it and the re-test cleared the gate. The ink dash
+is the right core mechanic, and the rejected alternatives stay rejected. This
+was the only gate with the power to stop the project, and it is behind us.
+
 **Deliverable:** a deployed grey box, and an honest answer to whether this game is worth building.
 
 ---
@@ -214,7 +227,7 @@ The tests earned their keep again, and so did looking at the screen.
 | **A one-tile gap does not exclude Full Nib** | PRD §4.4, §7.1 | 16px tiles against a 12×14 hitbox: *both* tiers fit, so the design's small-only passages had no geometry behind them. Fixed with a `CRACK` tile — solid to everything but a small body. A rule rather than emergent geometry, which is the honest trade: the fiction and the art survive, Phase 1's tuning does not move, and the solver can now *assert* a shortcut is Spent-only. |
 | **A jump pressed during a dash was silently eaten** | `player.ts` | The dash locks for ten frames and the jump buffer held six, so a jump pressed in the first four frames of a grounded dash did nothing at all — the most alarming thing a platformer can do. The buffer now holds for the length of the lock. |
 | **A straight-line reachability check can never land on a thin slab** | `reach.ts` | The line to any one-tile platform passes through the platform. Paths are now checked as an L — rise, then travel. |
-| **Pearl 3 was reachable without Deep Jet** | World 1 C1 | Which would have made the backtracking engine decorative. The gap is now over a bed of urchins with no footing, at fifteen tiles. |
+| **Pearl 3 was reachable without Deep Jet** | World 1 C1 | Which would have made the backtracking engine decorative. The gap is now over a bed of urchins with no footing, at twelve tiles. *Re-checked in Phase 3 against every upgrade except Deep Jet, at all three tiers — Cling does not open it.* |
 | **The boss arena was anchored to the map, not the floor** | `world.ts` | The King spawned inside the sand and the locked camera pointed at bedrock. The floor probe also scanned downward, which finds a platform, not a floor. |
 
 **One thing merged rather than built.** Gate 1's round-one fix added a hint
@@ -245,14 +258,27 @@ Two deviations from the PRD, both recorded in its decisions log:
 | **2.4** | **Hazards.** Urchins, collapsing sand, crush clams. | Instant-death-at-any-tier test |
 | **2.5** | **HUD and game state.** Lives, ink pips carrying tier state, shells, pause, death and respawn, checkpoints, continues, game over. | State machine tests; "respawn restores Full, never Charged or Spent" |
 | **2.6** | **Save system.** Versioned `localStorage`, string-keyed, migration path, corrupt-blob fallback to `.bak`. | Schema tests at 100%, including a deliberately corrupted blob |
-| **2.7** | **Audio spike.** The APU (2 pulse, triangle, noise), the dash SFX, one world theme. Gesture-gated start. | **Judgement call:** if the synth sounds bad here, fall back to fewer, simpler tracks now — not in Phase 4 |
+| **2.7** ✅ | **Audio spike.** The APU (2 pulse, triangle, noise), the dash SFX, one world theme. Gesture-gated start. | **Judgement call — answered: fall back.** Eleven tracks is cut to five; see below |
 | **2.8** | **World 1, all sections.** A1 through C3, per the PRD beat sheet. Ink Bulb taught in A4. | **Reachability test**: provably completable at the Spent tier |
 | **2.9** | **The Hermit King.** Three phases, fixed-camera arena, boss door and level exit. | Boss phase-transition tests |
 | **2.10** | **Title screen and level clear.** Enough shell to start, play, finish and restart without touching the console. | Browser smoke test drives the full loop |
 
-Every checkpoint above is ✅, **2.7's judgement call included**: the synth was listened to
-and passes, so the fallback to fewer and simpler tracks is not needed and Phase 4 can plan
-for the full eleven.
+Every checkpoint above is ✅, including 2.7's judgement call — **answered twice, and the
+second answer is the one that stands.**
+
+The first answer, on the branch that became PR #2: the synth was listened to and passed, so
+the fallback was not needed and Phase 4 could plan for the full eleven tracks.
+
+The second, later: *fall back*. The checkpoint exists to force this decision at the cheapest
+moment and it names its own escape hatch — *"if the synth sounds bad here, fall back to fewer,
+simpler tracks now, not in Phase 4."* The APU, the tracker and the five world themes are built
+and everything checkable is checked — pitch, tempo, note length, harmonic structure, a real
+`AudioContext` starting on a real keypress — but the eleven-track plan is off the table.
+
+**What this changes.** Phase 4's checkpoint 4.5 drops from 11 tracks to the **five that
+already exist**, one per chapter. §10.2's track list is cut to match. Roughly six days of
+authoring not spent — which is what taking the hatch early is worth, and is the reason the
+checkpoint is phrased the way it is.
 
 ### 🚦 Gate 2
 
@@ -274,18 +300,54 @@ level-design bug, and it gets fixed before Phase 3.
 This is the longest phase and the most mechanical. Phases 1 and 2 built the machine; this
 phase feeds it. The main risk is not difficulty — it's throughput and drift.
 
+**Built.** All eight checkpoints are green: 903 unit tests across 33 files, 11 browser tests,
+54 kB gzipped against a 1.5 MB budget. The game runs from the title screen through five
+worlds and five bosses to a clear screen, on one save, without touching the console. Gate 3
+is the remaining step, and it needs a sitting.
+
+### What Phase 3 surfaced
+
+The reachability solver had opinions about four of the five level designs, and the
+upgrade that caused the most trouble was the one that looked simplest.
+
+| Found | Where | Why it mattered |
+|---|---|---|
+| **Cling ends vertical gating** | Worlds 3–5 | Any rock face is a ladder once it is grippable. From World 3 on, a tall shaft is not a lock and never was — only horizontal distance over a void gates anything. W5's pearl ③ had to become a one-tile island fifteen tiles clear of every face, because a three-pip fall carries fourteen. Caught twice by the solver on the same pearl. |
+| **A four-pip pearl is the only kind Deep Jet can gate** | World 5 | Spent + Deep Jet and Full without it share a reach envelope *exactly*. Every three-pip gate authored for Deep Jet was already open to a player who never found it. |
+| **The Whipkelp was stompable** | `enemies/index.ts` | `canStomp` defaulted to true for anything unarmoured, and §6.1 says ❌. Being unstompable and being armoured are different properties — a Drifter is neither armoured nor worth landing on. |
+| **Two bosses were hittable before they woke** | `bosses/types.ts` | Their parts are authored open, so a bolt landed during the wake animation. Openness now requires the boss to be *fighting*, not merely to have an open part. |
+| **The Kraken could be disassembled in its last stage** | `bosses/kraken.ts` | Suckers stayed shootable through Stage 3, so a patient player never had to fight the phase the fight exists for. |
+| **World 3's bass undercut World 4's** | `music/worlds.ts` | The descent is meant to be audible — each theme lower than the last. A G1 in the wreck sat below the vents' C2 and broke the one property the five tracks share. Re-voiced to D2. |
+| **Four crumble tiles had transparent holes** | `tilesets/*` | Visible as bedrock through the floor, and only because the palette test walks every frame of every tileset rather than a sampled few. |
+| **A pearl inside a stunned enemy has no stable position** | World 4 ② | The beat sheet put it in a Magma Snail's shell; where the shell stops sliding decided whether the pearl was collectable. Moved behind a bombed wall. |
+
+Three deviations from the PRD, each recorded in its decisions log and in the level file that
+caused it:
+
+- **Cling's teaching room is a four-tile chimney, not "a single wall too tall to dash."** One
+  wall teaches the grip but not the push-off, and the push-off is the half that makes Cling a
+  way to travel rather than a place to wait.
+- **W4's pearl ② is behind cracked crust, not inside a Snail's shell.**
+- **W5's pearl ② is behind cracked crust, not a small-only crack** — the resolution of PRD
+  §16's one-tile-gap question, revisited with World 5 in front of us exactly as v1.4 asked.
+
+**One rule earned in this phase.** Completability is tested with the loadout a player is
+*guaranteed* to be holding on arrival, and that loadout is derived from the campaign order
+and §8.5's grant table — never authored per level. An authored loadout is a second copy of
+the campaign order, and the copy is what goes stale.
+
 ### Checkpoints
 
 | # | Checkpoint | Proven by |
 |---|---|---|
-| **3.1** | **Level editor.** Extends the sprite editor: paint tiles, place entities, export `LevelDef`. | A Phase 2 level round-trips through it byte-identically |
-| **3.2** | **Upgrade system.** Ink Shot, Cling, Ink Bomb, Heat Shell, Deep Jet. Persisted, and gating what they should. | Per-upgrade tests; "no upgrade changes hit count" asserted |
-| **3.3** | **World 2 — Kelp Forest.** Currents, bubble streams. Barb Turret, Whipkelp, Eel. The Kelp Warden. | Reachability at Spent tier, with and without each upgrade |
-| **3.4** | **World 3 — Sunken Ship.** Cling traversal, Hookline riding, the rising flood. Ghost Diver. The Drowned Captain. | Reachability; flood-timer test |
-| **3.5** | **World 4 — Volcanic Vents.** Rising magma, superheated water, ash collapse. Magma Snail, Cinder Moth. The Vent Lord. | Reachability; magma-rise rate test |
-| **3.6** | **World 5 — The Abyss.** Darkness and light radius, pressure crush, Deep Jet acquisition. Lightless, Bone Shrimp. | Reachability; pressure-timer test |
-| **3.7** | **The Kraken.** Three phases, no checkpoint, ~3 minutes. | Phase-transition tests; a scripted no-damage clear |
-| **3.8** | **Chapter structure.** Tilesets, palettes and music owned by chapters, not levels — the constraint that makes 50 levels possible later. | No level defines its own tileset |
+| **3.1** ✅ | **Level editor.** Extends the sprite editor: paint tiles, place entities, export `LevelDef`. | A Phase 2 level round-trips through it byte-identically — and so does every shipped level, read off disk |
+| **3.2** ✅ | **Upgrade system.** Ink Shot, Cling, Ink Bomb, Heat Shell, Deep Jet. Persisted, and gating what they should. | Per-upgrade tests; "no upgrade changes hit count" asserted |
+| **3.3** ✅ | **World 2 — Kelp Forest.** Currents, bubble streams. Barb Turret, Whipkelp, Eel. The Kelp Warden. | Reachability at Spent tier, with and without each upgrade |
+| **3.4** ✅ | **World 3 — Sunken Ship.** Cling traversal, Hookline riding, the rising flood. Ghost Diver. The Drowned Captain. | Reachability; flood-timer test |
+| **3.5** ✅ | **World 4 — Volcanic Vents.** Rising magma, superheated water, ash collapse. Magma Snail, Cinder Moth. The Vent Lord. | Reachability; magma-rise rate test |
+| **3.6** ✅ | **World 5 — The Abyss.** Darkness and light radius, pressure crush, Deep Jet acquisition. Lightless, Bone Shrimp. | Reachability; pressure-timer test |
+| **3.7** ✅ | **The Kraken.** Three phases, no checkpoint, ~3 minutes. | Phase-transition tests; a scripted no-damage clear |
+| **3.8** ✅ | **Chapter structure.** Tilesets, palettes and music owned by chapters, not levels — the constraint that makes 50 levels possible later. | No level defines its own tileset |
 
 ### Watch for drift
 
@@ -300,6 +362,14 @@ by vigilance:
 - **Roster creep.** 12 enemies is the budget. A new enemy needs a lesson no existing one
   teaches, written into the PRD before it's built.
 
+**How it went.** The roster held at §6.1's twelve species. The one addition is a *spawner* —
+the vent a Bone Shrimp swarm issues from — which is a placement, not a thirteenth thing to
+learn, and `tests/roster.test.ts` pins the count at twelve-plus-the-vent and reads §6.1's
+"Stomp?" column straight off, so the budget is checked rather than remembered. Mechanic soup was caught by the level headers: each of the
+four new level files opens with the beat sheet it was authored against, and a section that
+did not serve its world's mechanic had nowhere to hide in that list. The Spent-tier
+reachability gate was never skipped, and it is what found four of the eight rows above.
+
 ### 🚦 Gate 3
 
 **Play the entire game start to finish yourself, in one sitting, on a fresh save.** Then have
@@ -310,27 +380,121 @@ difficulty curve has the saw-tooth shape from the PRD — each world opening eas
 previous boss and closing harder. Instrument deaths per section during this run; that data
 drives Phase 4's tuning.
 
+### Gate 3, round one — failed
+
+**Verdict: "I haven't been able to beat it yet."**
+
+The most useful failure available, and the one the solver structurally cannot
+catch. Reachability proves a level is *possible* on two pips; it says nothing
+about whether a person can actually do it three lives at a time. Those are
+different questions, and only the second one is the gate.
+
+The fix is **Assist Mode**, which PRD §13 already specified and scheduled for
+checkpoint 4.7. It is pulled forward, because the two things Phase 4 is for —
+tuning against real playthrough data, and Gate 4's "60% of testers reach World
+3" — both need a game that can be finished first. Building it now costs nothing
+that building it later would not: it is three numbers and a switch.
+
+- **Lives never run out.** Stronger than §13's "infinite continues", because a
+  continue still costs the run its shells and routes the player through the
+  title on the way back. What stops a beginner is not the third death, it is
+  being sent to the start of the world for it.
+- **Enemies and bosses hold still on one frame in four** — a flat 25% slower,
+  as a skipped step rather than scaled speeds, so every species is slowed
+  through its own clock and none of them has to know the mode exists.
+- **A soft checkpoint every 32 tiles of new ground**, which roughly halves
+  §7.1's ~70-tile conch spacing — §13's "checkpoint density doubled" without
+  editing five levels.
+
+Nothing else changes: hazards still kill at every tier, the ink budget is still
+three pips, and the death is still counted so the no-death bonus stays honest.
+§13 says an assist run is stamped rather than blocked, so the clear screen says
+`ASSIST` and the run stands.
+
+**The tuning pass that followed.** §7.7's ladder is written for a game that
+reads too easy and names the order to tighten in; run downwards it names the
+order to loosen in, and the first rung is Ink Cores. Checking that rung turned
+up a real gap rather than a judgement call: **§7.1 requires 1–2 Ink Cores from
+World 3 onward, and Worlds 3, 4 and 5 had none.** The primary dial was set to
+zero across the whole back half of the game — the half the complaint was about.
+
+Four changes, in ladder order, each verified by the reachability solver and
+recorded in the PRD's decisions log:
+
+| Rung | Change |
+|---|---|
+| Ink Cores | One each in Worlds 3, 4 and 5, bringing them into line with §7.1 |
+| Ink Bulbs | World 3 raised from 4 to 6, the top of §7.1's range |
+| Checkpoints | A fourth conch per level. The longest walk back drops by about a third |
+| Continues | 3 → 5. A continue already costs the shells and the level, so it has teeth |
+
+Starting lives stay at three: more of those would soften the moment-to-moment
+game, and Gate 1 said that part was fine. Enemies are untouched, per §7.7's own
+rule — making them slower or weaker trades readability for difficulty, which is
+the opposite of the point.
+
+**What this does not settle.** Assist Mode makes the game finishable; the tuning
+pass makes the classic game *more* finishable. Neither proves it is right. Round two should be run **both ways** —
+the assisted run to confirm the game can be completed at all and to get the
+deaths-per-section data Phase 4 needs, and a classic run to find where the curve
+is actually wrong. A mode nobody can turn off is a tuning problem wearing an
+accessibility feature's clothes.
+
 **Deliverable:** the complete five-level game, online, content-locked.
 
 ---
 
-# Phase 4 · Meta & Ship
+# Phase 4 · Meta & Ship ✅
 
 > **Goal:** the systems that make people come back, and the quality that makes it worth
 > sharing.
+
+**Built.** All nine checkpoints are green: 1,107 unit tests across 41 files, 14 browser
+tests, 60.1 kB gzipped against a 1.5 MB budget. Gate 4 is the remaining step, and it needs
+five strangers.
+
+### What Phase 4 surfaced
+
+Every finding in this phase is the same shape, and it is a different shape from Phase 3's.
+Phase 3's bugs were *geometry* — a gate that did not gate, a pearl that could not be had.
+Phase 4's were all **things that were written down and never read back**: state the game
+carefully maintained and then ignored, or asked for and never received. None of them crash.
+
+| Found | Where | Why it mattered |
+|---|---|---|
+| **Progress was written and never read** | `main.ts` | `progress.unlocked` had been maintained since Phase 2 and no code ever looked at it, so every session started at the tide pools however far anyone had got. That is half of why Gate 3's playthrough went badly, and the world map is where it got fixed — the map's cursor *is* the continue. |
+| **Every point earned inside a level was discarded** | `state.ts` | The run banked only the clear tally's bonuses, so every stomp, chain, inked kill and boss hit was thrown away at the exit — after the HUD had spent the level showing the player those points, and in full view of a clear screen counting to a smaller number. |
+| **Seven sound cues fired silently** | `main.ts` | `audio.play(cue as Cue)` asserted that whatever the world raised was a sound the synth knew, and the compiler believed it. Every ranged-ink sound, the upgrade sting and the cling grip had been firing and producing nothing since Phase 3. |
+| **Three glyphs were missing** | `content/font.ts` | `↑` and `↓` in the two key hints — Gate 1's entire fix for nobody finding the up-dash — plus `>`, which is the cursor on both new menus. All drawn as missing-character boxes. The coverage test walked a hand-written list of strings rather than the screens. |
+| **A pearl paid out on every replay** | `world.ts` | 5,000 points and an extra life each time. Theoretical until 4.1 added free replay, at which point any cleared level is a life farm. |
+| **One run wrote five high scores** | `main.ts` | The table is the top ten *runs* and an entry went in per level clear, so a single playthrough filled half the board with snapshots of itself, each beating the last. |
+| **Escape left Options and then opened the world map** | `main.ts` | The options screen reads raw key events, so the driver saw the same press and delivered it to the screen behind. Found by a browser test that kept flaking — which is what a flaky test usually is. |
+| **Three allocations per frame** | `world.ts` | Two step contexts rebuilt every frame, one carrying two fresh closures, plus a box per checkpoint entity per frame. §12.6 had asked for zero since Phase 1. |
+
+**The pattern worth keeping.** Six of those eight were invisible to every existing test
+because the tests asserted what the code *stored*, not what it *used*. The fixes each came
+with an assertion of the second kind: the tally's lines must sum to what the HUD showed, the
+cue list is grepped out of the simulation and checked against the synth, the font test walks
+the option rows and map labels themselves, and the step contexts must be the same objects on
+frame 600 as on frame 1.
+
+**Two things deliberately not built.** Octo, Cuttle and Nautilus are §8.6's post-1.0 work and
+stay there — but the *unlock* for all fifteen pearls is recorded now, because the alternative
+is asking somebody who finished the collection in v1 to do it again in v2. And 2.7's
+soundtrack fallback holds: five chapter themes, not eleven tracks.
 
 ### Checkpoints
 
 | # | Checkpoint | Proven by |
 |---|---|---|
-| **4.1** | **Pearls and backtracking.** All 15 placed, persistent, tracked. Free replay of cleared levels from the world map. | **All 15 collectible** — asserted by the reachability solver given each pearl's stated upgrade and tier |
-| **4.2** | **Scoring.** Shells, stomp chains, Charged-dash kills, clear bonuses, no-damage and no-death bonuses. Local high-score table. | Score arithmetic at 100% coverage |
-| **4.3** | **Speedrun timers.** Frame-accurate per-level and full-run, PBs per character, splits, optional ghost. | Timer rule tests: boss fights counted, menus excluded, deaths don't stop the clock |
-| **4.4** | **World map.** Data-driven, scrollable, showing pearls, best times, lock state. | Renders correctly from an arbitrary node list, not five hard-coded ones |
-| **4.5** | **Full audio.** 11 tracks, ~26 SFX, independent volumes, one-key mute. | Manual; every cue also has a visual counterpart |
-| **4.6** | **Juice.** Hitstop, screen shake, ink trails, silt, shrink burst, the count-up score tally. | Manual — this is 60% of the game's feel and none of it is testable |
-| **4.7** | **Options and accessibility.** Key remapping, screen-shake and flash sliders, light-radius slider, Assist Mode. | A11y checklist; every hazard legible in greyscale |
-| **4.8** | **Performance and size.** ≤ 8 ms frame time, zero allocations in the update loop, ≤ 1.5 MB gzipped. | CI bundle assertion; a 5-minute session with no dropped frames |
+| **4.1** ✅ | **Pearls and backtracking.** All 15 placed, persistent, tracked. Free replay of cleared levels from the world map. | **All 15 collectible** — asserted by the reachability solver given each pearl's stated upgrade and tier |
+| **4.2** ✅ | **Scoring.** Shells, stomp chains, Charged-dash kills, clear bonuses, no-damage and no-death bonuses. Local high-score table. | Score arithmetic at 100% coverage |
+| **4.3** ✅ | **Speedrun timers.** Frame-accurate per-level and full-run, PBs per character, splits, optional ghost. | Timer rule tests: boss fights counted, menus excluded, deaths don't stop the clock |
+| **4.4** ✅ | **World map.** Data-driven, scrollable, showing pearls, best times, lock state. | Renders correctly from an arbitrary node list, not five hard-coded ones |
+| **4.5** ✅ | **Full audio.** ~~11 tracks~~ **the five chapter themes** (2.7's fallback, taken), ~26 SFX, independent volumes, one-key mute. | Manual; every cue also has a visual counterpart |
+| **4.6** ✅ | **Juice.** Hitstop, screen shake, ink trails, silt, shrink burst, the count-up score tally. | Manual — this is 60% of the game's feel and none of it is testable |
+| **4.7** ✅ | **Options and accessibility.** Key remapping, screen-shake and flash sliders, light-radius slider, ~~Assist Mode~~ *(built in Phase 3 — Gate 3 needed it to run at all)*. | A11y checklist; every hazard legible in greyscale |
+| **4.8** ✅ | **Performance and size.** ≤ 8 ms frame time, zero allocations in the update loop, ≤ 1.5 MB gzipped. | CI bundle assertion; a 5-minute session with no dropped frames |
 | **4.9** | **Playtest and tune.** Three external playtests. Apply the tightening ladder if it reads soft. | ≥ 60% of testers who start W1 reach W3 |
 
 ### The tuning ladder
@@ -401,7 +565,11 @@ bug report from an input log. It is also an early warning for accidental `Math.r
 **Spent-tier reachability.** An automated solver walks each level and proves it completable
 with a 2-pip budget. Because a player can always arrive at any section Spent, a section that
 requires 3 pips is a genuine unfairness bug — and it is invisible to a developer who always
-plays at Full.
+plays at Full. *Extended in Phase 3:* the solver now also carries a loadout, derived from the
+campaign order rather than authored per level — because a level whose first room is a kelp
+knot is not "unfinishable", it is finishable by everyone who can actually reach it. The same
+solver, run with the loadout a player *arrives* with, proves that any upgrade hidden inside a
+level can be got to; run without a given upgrade, it proves the pearls behind it stay shut.
 
 **The feel guarantees.** Five assertions that turn subjective regression into a red CI run.
 Their real value is permission: you can retune constants aggressively because the tests tell

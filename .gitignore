@@ -32,3 +32,6 @@ pnpm-debug.log*
 # playwright
 playwright-report/
 test-results/
+
+# scratch level-authoring scripts, never shipped
+.scratch/

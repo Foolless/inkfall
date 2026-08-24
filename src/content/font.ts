@@ -72,6 +72,24 @@ export const GLYPHS: Record<string, readonly string[]> = {
   ']': G('.###.', '...#.', '...#.', '...#.', '...#.', '...#.', '.###.'),
   /** Deliberately the multiplication sign, for `x3` lives. */
   x: G('.....', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '.....'),
+  /**
+   * The up arrow, for `HOLD ↑ + X TO DASH UP`.
+   *
+   * Gate 1's round-one finding was that nobody could find the up-dash, and that
+   * hint is the fix. Without this glyph it drew as the missing-character box —
+   * the one piece of text in the game that has to be read, rendered as a
+   * tofu square.
+   */
+  '↑': G('..#..', '.###.', '##.##', '..#..', '..#..', '..#..', '..#..'),
+  /** And the down arrow, for World 4's `[↓ + C] INK BOMB`. */
+  '↓': G('..#..', '..#..', '..#..', '..#..', '##.##', '.###.', '..#..'),
+  /** Lives in Assist Mode, where the counter never goes down (PRD §13). */
+  '∞': G('.....', '.....', '##.##', '#.#.#', '##.##', '.....', '.....'),
+  /** The menu cursor, on the world map and the options screen. */
+  '>': G('.....', '.#...', '..#..', '...#.', '..#..', '.#...', '.....'),
+  '<': G('.....', '...#.', '..#..', '.#...', '..#..', '...#.', '.....'),
+  /** A found pearl on the world map. Its unfound twin is the letter O. */
+  '*': G('.....', '#.#.#', '.###.', '#####', '.###.', '#.#.#', '.....'),
 }
 
 /** Anything unmapped draws as this, so a missing glyph is visible, not silent. */

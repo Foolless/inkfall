@@ -13,6 +13,7 @@
  */
 
 import type { TrackDef } from '../../engine/audio/tracker.js'
+import { WORLD_TRACKS } from './worlds.js'
 
 // prettier-ignore
 const melody: string[] = [
@@ -68,7 +69,14 @@ export const world1: TrackDef = {
   noise: { rows: drums, volume: 0.16 },
 }
 
-export const TRACKS: Record<string, TrackDef> = { world1 }
+/**
+ * The whole soundtrack, keyed by the id a *chapter* names.
+ *
+ * Five tracks for five worlds, and five tracks for fifty levels later — PRD
+ * §12.7's rule that chapters own music rather than levels is what keeps that
+ * true. Nothing in here is looked up by level id, and nothing should be.
+ */
+export const TRACKS: Record<string, TrackDef> = { world1, ...WORLD_TRACKS }
 
 export function trackFor(id: string): TrackDef | null {
   return TRACKS[id] ?? null

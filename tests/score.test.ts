@@ -23,6 +23,7 @@ const clean: ClearSummary = {
   bossDefeated: false,
   noDamage: false,
   noDeath: false,
+  levelPoints: 0,
 }
 
 describe('the point table matches the PRD', () => {
@@ -83,6 +84,8 @@ describe('the clear tally', () => {
       bossDefeated: true,
       noDamage: true,
       noDeath: true,
+      // 250 of shells + 15,000 of pearls + 5,000 of boss + 3,200 of enemies.
+      levelPoints: 23_450,
     })
     expect(lines).toEqual([
       { label: 'LEVEL CLEAR', points: 1_000 },
@@ -90,10 +93,11 @@ describe('the clear tally', () => {
       { label: 'SHELLS', points: 250 },
       { label: 'PEARLS', points: 15_000 },
       { label: 'BOSS', points: 5_000 },
+      { label: 'ENEMIES', points: 3_200 },
       { label: 'NO DAMAGE', points: 5_000 },
       { label: 'NO DEATH', points: 10_000 },
     ])
-    expect(tallyTotal(lines)).toBe(40_750)
+    expect(tallyTotal(lines)).toBe(43_950)
   })
 
   test('a fractional par remainder floors rather than rounding up', () => {
