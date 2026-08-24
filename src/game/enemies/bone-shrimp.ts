@@ -37,10 +37,10 @@ export function updateBoneShrimp(map: TileMap, e: Enemy, player: Box, collapsed:
 
   // It turns at a wall or a ledge like anything else that walks, so a swarm
   // pools at the bottom of a shaft rather than pouring off the edge of it.
-  if (moveX(map, e, e.vx, collapsed)) e.facing = -e.facing as 1 | -1
-  else if (isGrounded(map, e, collapsed) && wouldWalkOffLedge(map, e, collapsed)) e.x -= e.vx
+  if (moveX(map, e, e.vx, { collapsed })) e.facing = -e.facing as 1 | -1
+  else if (isGrounded(map, e, { collapsed }) && wouldWalkOffLedge(map, e, collapsed)) e.x -= e.vx
 
-  if (moveY(map, e, e.vy, collapsed).blocked) e.vy = 0
+  if (moveY(map, e, e.vy, { collapsed }).blocked) e.vy = 0
 
   if (hasPatrol(e)) {
     if (e.x < e.patrolLo) e.x = e.patrolLo

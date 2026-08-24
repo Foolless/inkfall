@@ -21,6 +21,7 @@ import {
   moveY,
   overlapsSolid,
   type Box,
+  type Terrain,
 } from './collision.js'
 import { isFluid, Tile, type TileMap } from './tilemap.js'
 import { HAZARDS, UPGRADES } from './constants.js'
@@ -172,7 +173,7 @@ export function setTier(map: TileMap, p: Player, tier: TierIndex, collapsed?: Re
   if (p.ink > inkMax(p)) p.ink = inkMax(p)
 
   // Growing can leave the taller box inside a ceiling; lift it clear.
-  const q = { downward: false, prevBottom: p.y + p.h, collapsed }
+  const q = { downward: false, prevBottom: p.y + p.h, collapsed, small: tier === SPENT }
   const probe: Box = { x: p.x, y: p.y, w: p.w, h: p.h }
   for (let lift = 0; lift <= T; lift++) {
     probe.y = p.y - lift
@@ -246,13 +247,19 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   if (!p.alive) return
   p.prevY = p.y
   const { map, collapsed } = ctx
-  const solids = ctx.solids
+  // Only Spent Nib fits a crack. This is the one thing being small can do that
+  // being Full cannot — see PRD §16 and game/tilemap.ts's CRACK.
+  const terrain: Terrain = { collapsed, solids: ctx.solids, small: p.tier === SPENT }
   const tier = tierOf(p)
 
   if (p.dashCooldown > 0) p.dashCooldown--
   if (p.iframes > 0) p.iframes--
   if (p.stunCloud > 0) p.stunCloud--
-  if (p.jumpBuffer > 0) p.jumpBuffer--
+  // The buffer does not tick down during dash lock. A dash is a ten-frame
+  // lockout, and the buffer's whole job is that a jump pressed slightly early
+  // still fires — pressing it four frames into a dash and getting nothing at
+  // all is the same input eaten for the same reason. See tests/movement.test.ts.
+  if (p.jumpBuffer > 0 && p.dashFrames === 0) p.jumpBuffer--
   if (p.coyote > 0) p.coyote--
   if (p.shootCooldown > 0) p.shootCooldown--
 
@@ -303,8 +310,8 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
   applyCurrents(map, p)
 
   // X then Y, each in sub-steps — see collision.ts.
-  moveX(map, p, p.vx, collapsed, solids)
-  const vres = moveY(map, p, p.vy, collapsed, solids)
+  moveX(map, p, p.vx, terrain)
+  const vres = moveY(map, p, p.vy, terrain)
   if (vres.blocked) {
     if (p.vy > 0 && vres.landedTile >= 0) startCrumble(ctx, vres.landedTile, tier.crumbleHold)
     p.vy = 0
@@ -317,7 +324,7 @@ export function updatePlayer(ctx: PlayerStepContext, p: Player, input: InputFram
     p.vy *= INK.DASH_CARRYOVER
   }
 
-  const grounded = isGrounded(map, p, collapsed, solids)
+  const grounded = isGrounded(map, p, terrain)
   if (grounded) p.jumping = false
   if (grounded && !p.grounded) p.dashCooldown = 0
   if (grounded) p.coyote = PHYSICS.COYOTE_FRAMES

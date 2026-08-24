@@ -109,6 +109,52 @@ describe('jump forgiveness', () => {
     expect(jumped).toBe(true)
   })
 
+  /**
+   * A jump pressed during a dash used to vanish.
+   *
+   * The dash locks velocity for ten frames and the buffer only holds six, so a
+   * jump pressed in the first four frames of a grounded dash was silently
+   * eaten — the player pressed jump and nothing whatsoever happened, which is
+   * the single most alarming thing a platformer can do. The buffer now holds
+   * for the length of the lock: a dash is exactly the "slightly early" case the
+   * buffer exists for.
+   */
+  test('a jump pressed during a dash fires when the dash ends', () => {
+    const d = new Driver(settle(worldWith(flatGround(80))))
+    d.step(Act.Right, 30)
+    d.tap(Act.Dash, Act.Right | Act.Dash)
+    d.tap(Act.Jump, Act.Right | Act.Jump)
+
+    let left = false
+    for (let i = 0; i < 30; i++) {
+      d.step(Act.Right | Act.Jump)
+      if (!d.p.grounded && d.p.vy < 0) left = true
+    }
+    expect(left, 'the buffered jump never fired').toBe(true)
+  })
+
+  test('and it is a full jump, not a stub, when jump is held', () => {
+    const d = new Driver(settle(worldWith(flatGround(80))))
+    d.step(Act.Right, 30)
+    d.tap(Act.Dash, Act.Right | Act.Dash)
+    d.tap(Act.Jump, Act.Right | Act.Jump)
+
+    let peak = 0
+    for (let i = 0; i < 40; i++) {
+      d.step(Act.Right | Act.Jump)
+      peak = Math.min(peak, d.p.vy)
+    }
+    expect(peak).toBeLessThan(PHYSICS.JUMP_CUT * 2)
+  })
+
+  test('but the buffer still expires once the dash is over', () => {
+    const d = new Driver(settle(worldWith(flatGround(80))))
+    d.tap(Act.Jump, Act.Jump)
+    d.step(0, 60)
+    expect(d.p.grounded).toBe(true)
+    expect(d.p.jumpBuffer).toBe(0)
+  })
+
   test('releasing jump early cuts the rise', () => {
     const full = new Driver(settle(worldWith(flatGround())))
     const short = new Driver(settle(worldWith(flatGround())))

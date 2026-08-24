@@ -123,8 +123,10 @@ describe('tileset frames', () => {
     for (const f of TILESET_FRAMES) {
       expect([f.w, f.h], f.name).toEqual([16, 16])
       const opaque = decode(f).filter((p) => p !== 0).length
-      const wanted =
-        f.name.includes('Oneway') || f.name.includes('Urchin') || f.name.includes('Hazard') ? 16 : 256
+      // A one-way ledge is a thin plank, an urchin is spikes, and a crack is
+      // mostly the gap it is named after. Everything else is a full cell.
+      const partial = ['Oneway', 'Urchin', 'Hazard', 'Crack'].some((n) => f.name.includes(n))
+      const wanted = partial ? 16 : 256
       expect(opaque, `${f.name} covers ${opaque} pixels`).toBeGreaterThanOrEqual(wanted)
     }
   })

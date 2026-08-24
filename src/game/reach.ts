@@ -27,7 +27,7 @@
  * exist. That is exactly the question PRD §12.8 asks.
  */
 
-import { DISPLAY, TIERS, UPGRADES, type TierIndex } from './constants.js'
+import { DISPLAY, SPENT, TIERS, UPGRADES, type TierIndex } from './constants.js'
 import { Tile, tileAt, type TileMap } from './tilemap.js'
 import { spawnClam, type Clam } from './hazards.js'
 import { hasUpgrade, maskOf, type UpgradeId } from './upgrades.js'
@@ -125,8 +125,13 @@ function isGroundTile(map: TileMap, tx: number, ty: number): boolean {
   )
 }
 
-function isBlocking(map: TileMap, tx: number, ty: number): boolean {
+function isBlocking(map: TileMap, tx: number, ty: number, small: boolean): boolean {
   const t = tileAt(map, tx, ty)
+  // A crack is solid to everyone but Spent Nib, which is what makes a
+  // small-only shortcut expressible — and assertable.
+  if (t === Tile.CRACK) return !small
+  // The upgrade-opened terrain is solid here too; `opened()` is what lets a
+  // solver holding the right upgrade walk through it.
   return (
     t === Tile.SOLID ||
     t === Tile.SLICK ||
@@ -206,6 +211,7 @@ export function analyseReach(level: LoadedLevel, options: ReachOptions = {}): Re
   const has = (id: UpgradeId) => hasUpgrade(held, id)
   const maxPips = TIERS[tier]!.inkMax + (has('deepJet') ? UPGRADES.DEEP_JET_PIPS : 0)
   const clearance = clearanceTiles(tier)
+  const small = tier === SPENT
 
   // Terrain an upgrade opens is simply *not there* as far as geometry goes.
   // Modelling it as removed rather than as a special case is what keeps the
@@ -246,7 +252,7 @@ export function analyseReach(level: LoadedLevel, options: ReachOptions = {}): Re
     if (tx < 0 || tx >= map.width || ty < 0 || ty >= map.height) return false
     for (let i = 0; i < clearance; i++) {
       if (opened(tx, ty - i)) continue
-      if (isBlocking(map, tx, ty - i) || deadly(tx, ty - i)) return false
+      if (isBlocking(map, tx, ty - i, small) || deadly(tx, ty - i)) return false
       if (fillsTheCell(tx, ty - i)) return false
     }
     return true

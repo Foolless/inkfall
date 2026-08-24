@@ -136,7 +136,7 @@ export function updateProjectiles(map: TileMap, pool: Projectile[], collapsed: R
  */
 function stepBolt(map: TileMap, p: Projectile, collapsed: ReadonlySet<number>): void {
   p.vy += UPGRADES.SHOT_GRAVITY
-  if (moveX(map, p, p.vx, collapsed) || moveY(map, p, p.vy, collapsed).blocked) p.alive = false
+  if (moveX(map, p, p.vx, { collapsed }) || moveY(map, p, p.vy, { collapsed }).blocked) p.alive = false
   if (p.clock >= UPGRADES.SHOT_LIFE) p.alive = false
 }
 
@@ -151,8 +151,8 @@ function stepBolt(map: TileMap, p: Projectile, collapsed: ReadonlySet<number>): 
 function stepBomb(map: TileMap, p: Projectile, collapsed: ReadonlySet<number>): void {
   if (!p.settled) {
     p.vy += UPGRADES.BOMB_GRAVITY
-    if (moveX(map, p, p.vx, collapsed)) p.vx = 0
-    if (moveY(map, p, p.vy, collapsed).blocked) {
+    if (moveX(map, p, p.vx, { collapsed })) p.vx = 0
+    if (moveY(map, p, p.vy, { collapsed }).blocked) {
       p.vx = 0
       p.vy = 0
       p.settled = true
@@ -166,7 +166,7 @@ function stepBomb(map: TileMap, p: Projectile, collapsed: ReadonlySet<number>): 
 
 /** A barb. Straight, no arc, and it stops at the first thing it meets. */
 function stepBarb(map: TileMap, p: Projectile, collapsed: ReadonlySet<number>): void {
-  if (moveX(map, p, p.vx, collapsed) || moveY(map, p, p.vy, collapsed).blocked) p.alive = false
+  if (moveX(map, p, p.vx, { collapsed }) || moveY(map, p, p.vy, { collapsed }).blocked) p.alive = false
   if (p.clock >= ENEMIES.BARB_LIFE) p.alive = false
 }
 
@@ -180,7 +180,7 @@ function stepBarb(map: TileMap, p: Projectile, collapsed: ReadonlySet<number>): 
 function stepEmber(map: TileMap, p: Projectile, collapsed: ReadonlySet<number>): void {
   if (!p.settled) {
     p.vy += ENEMIES.EMBER_GRAVITY
-    if (moveY(map, p, p.vy, collapsed).blocked) {
+    if (moveY(map, p, p.vy, { collapsed }).blocked) {
       p.vy = 0
       p.settled = true
       p.clock = 0

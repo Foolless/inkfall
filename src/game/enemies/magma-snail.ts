@@ -22,13 +22,13 @@ export function updateMagmaSnail(map: TileMap, e: Enemy, collapsed: ReadonlySet<
   e.vx = e.facing * ENEMIES.SNAIL_SPEED
   e.vy = Math.min(e.vy + ENEMIES.GRAVITY, ENEMIES.TERMINAL_FALL)
 
-  if (moveX(map, e, e.vx, collapsed)) turn(e)
-  else if (isGrounded(map, e, collapsed) && wouldWalkOffLedge(map, e, collapsed)) {
+  if (moveX(map, e, e.vx, { collapsed })) turn(e)
+  else if (isGrounded(map, e, { collapsed }) && wouldWalkOffLedge(map, e, collapsed)) {
     turn(e)
     e.x -= e.vx
   }
 
-  if (moveY(map, e, e.vy, collapsed).blocked) e.vy = 0
+  if (moveY(map, e, e.vy, { collapsed }).blocked) e.vy = 0
 
   if (hasPatrol(e)) {
     if (e.x < e.patrolLo) {

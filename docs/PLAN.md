@@ -210,8 +210,11 @@ Building one level completely, rather than five levels partially, is what surfac
 expensive unknowns: how long a sprite really takes, whether the synth sounds acceptable,
 whether the save system holds. Better to learn all of that once than five times.
 
-**Built.** All ten checkpoints are green: 521 unit tests, 8 browser smoke tests, 29 kB
+**Built.** All ten checkpoints are green: 529 unit tests, 8 browser smoke tests, 30 kB
 gzipped. Gate 2 is the remaining step, and it needs a stranger.
+
+**Checkpoint 2.7's judgement call is answered: the synth passes.** The APU stays, and
+Phase 4 can commit to the eleven tracks in PRD §10.2.
 
 ### What Phase 2 surfaced
 
@@ -221,7 +224,8 @@ The tests earned their keep again, and so did looking at the screen.
 |---|---|---|
 | **The jump cut was eating stomp bounces** | `player.ts` | Releasing jump clamped *any* rise, so every bounce was −1.80 instead of the specified −4.60: a third of the promised height, and just low enough that a bounce chain could not physically reach the next enemy. It read as a level-design problem until something measured it. |
 | **Landing between two crabs stomped one and was bitten by the other** | `combat.ts` | The first stomp reverses `vy`, so the second enemy in the same landing read as a walk into its flank. Contacts now resolve against one snapshot of how Nib arrived, and a landing beats a touch for the whole frame. |
-| **A one-tile gap does not exclude Full Nib** | PRD §4.4, §7.1 | 16px tiles against a 12×14 hitbox: *both* tiers fit. The design's small-only passages cannot be built at these numbers. W1 ships without one; PRD §16 lays out the three ways forward. |
+| **A one-tile gap does not exclude Full Nib** | PRD §4.4, §7.1 | 16px tiles against a 12×14 hitbox: *both* tiers fit, so the design's small-only passages had no geometry behind them. Fixed with a `CRACK` tile — solid to everything but a small body. A rule rather than emergent geometry, which is the honest trade: the fiction and the art survive, Phase 1's tuning does not move, and the solver can now *assert* a shortcut is Spent-only. |
+| **A jump pressed during a dash was silently eaten** | `player.ts` | The dash locks for ten frames and the jump buffer held six, so a jump pressed in the first four frames of a grounded dash did nothing at all — the most alarming thing a platformer can do. The buffer now holds for the length of the lock. |
 | **A straight-line reachability check can never land on a thin slab** | `reach.ts` | The line to any one-tile platform passes through the platform. Paths are now checked as an L — rise, then travel. |
 | **Pearl 3 was reachable without Deep Jet** | World 1 C1 | Which would have made the backtracking engine decorative. The gap is now over a bed of urchins with no footing, at twelve tiles. *Re-checked in Phase 3 against every upgrade except Deep Jet, at all three tiers — Cling does not open it.* |
 | **The boss arena was anchored to the map, not the floor** | `world.ts` | The King spawned inside the sand and the locked camera pointed at bedrock. The floor probe also scanned downward, which finds a platform, not a floor. |
@@ -259,20 +263,22 @@ Two deviations from the PRD, both recorded in its decisions log:
 | **2.9** | **The Hermit King.** Three phases, fixed-camera arena, boss door and level exit. | Boss phase-transition tests |
 | **2.10** | **Title screen and level clear.** Enough shell to start, play, finish and restart without touching the console. | Browser smoke test drives the full loop |
 
-Every checkpoint above is ✅, including 2.7's judgement call — **answered in Phase 3, and the
-answer was to fall back.**
+Every checkpoint above is ✅, including 2.7's judgement call — **answered twice, and the
+second answer is the one that stands.**
 
-The checkpoint exists to force exactly this decision at the cheapest moment, and it names its
-own escape hatch: *"if the synth sounds bad here, fall back to fewer, simpler tracks now — not
-in Phase 4."* Someone listened and took it. The APU, the tracker and the five world themes are
-built and everything checkable is checked — pitch, tempo, note length, harmonic structure, a
-real `AudioContext` starting on a real keypress — but the eleven-track plan is off the table.
+The first answer, on the branch that became PR #2: the synth was listened to and passed, so
+the fallback was not needed and Phase 4 could plan for the full eleven tracks.
+
+The second, later: *fall back*. The checkpoint exists to force this decision at the cheapest
+moment and it names its own escape hatch — *"if the synth sounds bad here, fall back to fewer,
+simpler tracks now, not in Phase 4."* The APU, the tracker and the five world themes are built
+and everything checkable is checked — pitch, tempo, note length, harmonic structure, a real
+`AudioContext` starting on a real keypress — but the eleven-track plan is off the table.
 
 **What this changes.** Phase 4's checkpoint 4.5 drops from 11 tracks to the **five that
-already exist**, one per chapter, plus whatever a title and a clear screen need. §10.2's
-track list is cut to match. That is the whole cost of the decision, and taking it now is what
-the checkpoint was for: eleven tracks would have been ~6 days of authoring against a synth
-nobody wanted more of.
+already exist**, one per chapter. §10.2's track list is cut to match. Roughly six days of
+authoring not spent — which is what taking the hatch early is worth, and is the reason the
+checkpoint is phrased the way it is.
 
 ### 🚦 Gate 2
 

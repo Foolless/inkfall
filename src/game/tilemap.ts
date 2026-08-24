@@ -22,6 +22,18 @@ export const Tile = {
   HOT: 14,
   /** A kelp knot. Solid until an Ink Shot bolt breaks it open. */
   KNOT: 15,
+  /**
+   * A crack only Spent Nib fits through. PRD §7.1's small-only passages.
+   *
+   * A rule rather than geometry, and deliberately so: at 16px tiles a 12x14
+   * hitbox fits any one-tile opening, so "small enough to squeeze through"
+   * cannot be expressed by the grid alone. See PRD §16.
+   *
+   * Distinct from `CRACKED`, which is a *bomb wall*. The two arrived on
+   * separate branches both calling themselves `x`; this one is `n`, for
+   * narrow, because four levels are authored against the other one.
+   */
+  CRACK: 16,
 } as const
 export type TileId = (typeof Tile)[keyof typeof Tile]
 
@@ -43,6 +55,7 @@ export const LEGEND: Record<string, TileId> = {
   k: Tile.KNOT,
   m: Tile.MAGMA,
   h: Tile.HOT,
+  n: Tile.CRACK,
 }
 
 /**

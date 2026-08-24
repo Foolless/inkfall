@@ -148,7 +148,7 @@ describe('crumble tiles', () => {
   test('a collapsed crumble tile is not', () => {
     const collapsed = new Set([2 * bridge.width + 1])
     const b = box(1 * TILE, 1 * TILE, 8, 8)
-    const r = moveY(bridge, b, 20, collapsed)
+    const r = moveY(bridge, b, 20, { collapsed })
     expect(r.landed).toBe(false)
   })
 })

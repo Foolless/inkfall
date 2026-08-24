@@ -67,6 +67,7 @@ const COLOURS: Record<TileId, string | null> = {
   [Tile.MAGMA]: '#ff6b35',
   [Tile.HOT]: '#8b2c1f',
   [Tile.KNOT]: '#3d7a52',
+  [Tile.CRACK]: '#2c3a30',
 }
 
 /**
@@ -264,7 +265,9 @@ export class Renderer {
               ? set.oneway
               : t === Tile.SLICK
                 ? set.slick
-                : isBlocked(w.map, tx, ty - 1)
+                : t === Tile.CRACK && set.crack
+                  ? set.crack
+                  : isBlocked(w.map, tx, ty - 1)
                   ? set.solidFill
                   : set.solidTop
         drawSprite(ctx, this.sprites.get(cel), px, py)

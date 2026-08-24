@@ -13,6 +13,28 @@ export interface Box {
   h: number
 }
 
+/**
+ * Everything beyond the tilemap that decides what is solid right now.
+ *
+ * Bundled rather than passed as three more positional arguments, because
+ * `moveX(map, box, dx, collapsed, solids, small)` is a signature nobody reads
+ * correctly twice.
+ */
+export interface Terrain {
+  /** Crumble tiles that have collapsed and are not currently solid. */
+  collapsed?: ReadonlySet<number> | undefined
+  /** Solid boxes that are not terrain — closed crush clams, for now. */
+  solids?: readonly Box[] | undefined
+  /**
+   * True for a body small enough to fit a crack.
+   *
+   * Only Spent Nib sets this. It is the one thing in the game that Full cannot
+   * do, and it exists as a rule rather than as geometry because at 16px tiles
+   * against a 12x14 hitbox, geometry cannot express it — see PRD §16.
+   */
+  small?: boolean | undefined
+}
+
 export interface SolidQuery {
   /** True while resolving downward motion — one-way platforms only exist then. */
   downward: boolean
@@ -29,6 +51,8 @@ export interface SolidQuery {
    * Tuesday tunnels through on Wednesday.
    */
   solids?: readonly Box[] | undefined
+  /** True for a body small enough to fit through a crack. */
+  small?: boolean | undefined
 }
 
 export { overlapsSolidTile }
@@ -36,6 +60,9 @@ export { overlapsSolidTile }
 export function isSolid(map: TileMap, tx: number, ty: number, q: SolidQuery): boolean {
   const t: TileId = tileAt(map, tx, ty)
   if (t === Tile.SOLID || t === Tile.SLICK) return true
+  // A crack: solid to everything except a body small enough to squeeze through.
+  if (t === Tile.CRACK) return q.small !== true
+
   // Crumble, cracked and fused are all "solid until something removes them",
   // and `collapsed` is the one place that records which ones have gone. A
   // bombed wall and a fallen sand tile are the same fact to the sweep.
@@ -79,15 +106,9 @@ function overlapsSolidTile(map: TileMap, box: Box, q: SolidQuery): boolean {
  *
  * Returns true if the move was blocked.
  */
-export function moveX(
-  map: TileMap,
-  box: Box,
-  dx: number,
-  collapsed?: ReadonlySet<number>,
-  solids?: readonly Box[],
-): boolean {
+export function moveX(map: TileMap, box: Box, dx: number, terrain: Terrain = {}): boolean {
   if (dx === 0) return false
-  const q: SolidQuery = { downward: false, prevBottom: box.y + box.h, collapsed, solids }
+  const q: SolidQuery = { downward: false, prevBottom: box.y + box.h, ...terrain }
   const sign = Math.sign(dx)
   let remaining = Math.abs(dx)
 
@@ -123,18 +144,12 @@ export interface MoveYResult {
   landedTile: number
 }
 
-export function moveY(
-  map: TileMap,
-  box: Box,
-  dy: number,
-  collapsed?: ReadonlySet<number>,
-  solids?: readonly Box[],
-): MoveYResult {
+export function moveY(map: TileMap, box: Box, dy: number, terrain: Terrain = {}): MoveYResult {
   const result: MoveYResult = { blocked: false, landed: false, landedTile: -1 }
   if (dy === 0) return result
 
   const sign = Math.sign(dy)
-  const q: SolidQuery = { downward: sign > 0, prevBottom: box.y + box.h, collapsed, solids }
+  const q: SolidQuery = { downward: sign > 0, prevBottom: box.y + box.h, ...terrain }
   let remaining = Math.abs(dy)
 
   while (remaining > 0) {
@@ -174,14 +189,9 @@ export function moveY(
 }
 
 /** True when solid ground sits directly under the box. */
-export function isGrounded(
-  map: TileMap,
-  box: Box,
-  collapsed?: ReadonlySet<number>,
-  solids?: readonly Box[],
-): boolean {
+export function isGrounded(map: TileMap, box: Box, terrain: Terrain = {}): boolean {
   const probe: Box = { x: box.x, y: box.y + 1, w: box.w, h: box.h }
-  const q: SolidQuery = { downward: true, prevBottom: box.y + box.h, collapsed, solids }
+  const q: SolidQuery = { downward: true, prevBottom: box.y + box.h, ...terrain }
   return overlapsSolid(map, probe, q)
 }
 

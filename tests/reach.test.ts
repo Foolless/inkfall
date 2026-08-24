@@ -109,13 +109,13 @@ describe('terrain the solver must respect', () => {
 })
 
 /**
- * The tier that was supposed to be the difference, and is not.
+ * Small-only passages, and why they are a rule rather than geometry.
  *
- * Full is 12x14 and Spent is 10x10 against 16px tiles, so both fit through a
- * one-tile opening. PRD §7.1's small-only passages cannot be built from plain
- * geometry at these numbers. The solver derives this from the hitbox rather
- * than assuming it, so it will start telling the truth on its own the day the
- * tier boxes change.
+ * Full is 12x14 and Spent is 10x10 against 16px tiles, so *both* fit through a
+ * one-tile opening — the difference PRD §4.4 and §7.1 lean on does not exist in
+ * the grid. So a crack is its own tile: solid to everything except a body small
+ * enough to squeeze through. Clearance is still derived from the hitbox rather
+ * than assumed, so the day the tier boxes change, this stops lying on its own.
  */
 describe('clearance', () => {
   test('every drawn tier needs exactly one clear tile', () => {
@@ -124,11 +124,20 @@ describe('clearance', () => {
     expect(clearanceTiles(CHARGED_TIER)).toBe(1)
   })
 
-  test('so a one-tile gap does not exclude Full Nib', () => {
+  test('which is why a bare one-tile gap does not exclude Full Nib', () => {
     const crawl = ['S.........', '##.....###', '..........', '##########']
     const spent = analyse(crawl, { tier: SPENT }).reachable.size
     const full = analyse(crawl, { tier: FULL }).reachable.size
     expect(full).toBe(spent)
+  })
+
+  test('a crack does, at every tier above Spent', () => {
+    const pocket = ['S...n.....', '##########']
+    const far = (tier: typeof SPENT | typeof FULL | typeof CHARGED_TIER) =>
+      Math.max(...[...analyse(pocket, { tier }).reachable].map((id) => id % 10))
+    expect(far(SPENT)).toBeGreaterThan(4)
+    expect(far(FULL)).toBeLessThan(4)
+    expect(far(CHARGED_TIER)).toBeLessThan(4)
   })
 })
 
@@ -186,6 +195,20 @@ describe('every campaign level is completable at the Spent tier', () => {
           .filter((e) => e.type === 'inkBulb' || e.type === 'inkCore')
           .filter((e) => !within(r.reachable, width, e.x, e.y))
         expect(missed).toEqual([])
+      })
+
+      /**
+       * §7.1: small-only passages are shortcuts and speedrun routes, never
+       * mandatory. A player who never takes a hit must never meet a wall only
+       * a hit could have opened.
+       */
+      test('is completable at Full too, so no crack is ever on the path', () => {
+        // With the loadout, like every other gate here: a level whose first room
+        // is a kelp knot is not "uncompletable at Full", it is uncompletable by
+        // somebody who has not cleared World 1, and nobody is in that position.
+        const full = analyseReach(level, { tier: FULL, upgrades: inside })
+        expect(full.reachedExit).toBe(true)
+        expect(full.reachedCheckpoints).toBe(true)
       })
 
       test('runs inside the CI budget', () => {

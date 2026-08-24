@@ -35,8 +35,8 @@ export function updatePuffer(map: TileMap, e: Enemy, player: Box, collapsed: Rea
   resize(e, e.inflated > 0)
 
   e.vy = Math.min(e.vy + ENEMIES.GRAVITY, ENEMIES.TERMINAL_FALL)
-  if (moveY(map, e, e.vy, collapsed).blocked) e.vy = 0
-  if (isGrounded(map, e, collapsed)) e.vy = 0
+  if (moveY(map, e, e.vy, { collapsed }).blocked) e.vy = 0
+  if (isGrounded(map, e, { collapsed })) e.vy = 0
 
   e.clock++
 }
