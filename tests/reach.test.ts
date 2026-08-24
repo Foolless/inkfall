@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import { analyseReach, clearanceTiles, ENVELOPES } from '../src/game/reach.js'
 import { loadCampaignLevel, loadLevel, type LevelDef } from '../src/content/levels/format.js'
-import { campaign } from '../src/content/levels/index.js'
+import { campaign, loadoutInside, loadoutOnArrival } from '../src/content/levels/index.js'
+import { UPGRADE_IDS as ALL_IDS } from '../src/game/upgrades.js'
 import { CHARGED_TIER, FULL, SPENT } from '../src/game/constants.js'
 import { levelFrom } from './helpers.js'
 
@@ -142,34 +143,54 @@ describe('every campaign level is completable at the Spent tier', () => {
   for (const def of campaign()) {
     describe(def.id, () => {
       const level = loadCampaignLevel(def)
+      /**
+       * The upgrades a player is *guaranteed* to hold on arrival, derived from
+       * the campaign order rather than authored.
+       *
+       * Running this gate with an empty loadout would ask a question about a
+       * run that cannot happen: World 2's first room is a kelp knot that only
+       * an Ink Shot opens, and every player who reaches it earned one for
+       * clearing World 1. The empty-handed answer is "unfinishable", and it
+       * would be wrong.
+       */
+      const arriving = loadoutOnArrival(def.id)
+      /** Plus whatever the level itself hands over. Only World 5 differs. */
+      const inside = loadoutInside(def.id)
 
       test('reaches the exit or the boss door on two pips', () => {
-        const r = analyseReach(level, { tier: SPENT })
-        expect(r.maxPips).toBe(2)
+        const r = analyseReach(level, { tier: SPENT, upgrades: inside })
+        expect(r.maxPips).toBe(inside.includes('deepJet') ? 3 : 2)
         expect(r.reachedExit).toBe(true)
       })
 
       test('every conch can be touched on two pips', () => {
-        expect(analyseReach(level, { tier: SPENT }).reachedCheckpoints).toBe(true)
+        expect(analyseReach(level, { tier: SPENT, upgrades: inside }).reachedCheckpoints).toBe(true)
+      })
+
+      /**
+       * An upgrade found *inside* a level has to be reachable with what the
+       * player walked in holding, or the rooms after it are unreachable and
+       * the level is a dead end. Only World 5's Deep Jet is ever in here.
+       */
+      test('any upgrade this level grants can be reached with what you arrived with', () => {
+        const nodules = level.entities.filter((e) => e.type === 'deepJet')
+        if (nodules.length === 0) return
+        const r = analyseReach(level, { tier: SPENT, upgrades: arriving })
+        for (const n of nodules) expect(within(r.reachable, level.map.width, n.x, n.y)).toBe(true)
       })
 
       test('every Ink Bulb and Ink Core can be got to at the tier that needs it', () => {
-        const r = analyseReach(level, { tier: FULL, upgrades: ['deepJet'] })
+        const r = analyseReach(level, { tier: FULL, upgrades: [...ALL_IDS] })
         const width = level.map.width
         const missed = level.entities
           .filter((e) => e.type === 'inkBulb' || e.type === 'inkCore')
-          .filter((e) => {
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) if (r.reachable.has((e.y + dy) * width + e.x + dx)) return false
-            }
-            return true
-          })
+          .filter((e) => !within(r.reachable, width, e.x, e.y))
         expect(missed).toEqual([])
       })
 
       test('runs inside the CI budget', () => {
         const started = process.hrtime.bigint()
-        analyseReach(level, { tier: SPENT })
+        analyseReach(level, { tier: SPENT, upgrades: inside })
         const ms = Number(process.hrtime.bigint() - started) / 1e6
         // PRD §12.7 budgets 30s for five levels now and 2 min at fifty.
         expect(ms).toBeLessThan(2_000)
@@ -177,6 +198,14 @@ describe('every campaign level is completable at the Spent tier', () => {
     })
   }
 })
+
+/** A collectible counts as got if any cell beside it is reachable. */
+function within(reachable: ReadonlySet<number>, width: number, x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) if (reachable.has((y + dy) * width + x + dx)) return true
+  }
+  return false
+}
 
 describe('World 1 pearls', () => {
   const level = loadCampaignLevel(campaign().find((d) => d.id === 'w01-tidepools')!)

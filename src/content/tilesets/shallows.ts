@@ -160,6 +160,7 @@ export interface Tileset {
    */
   cracked?: SpriteDef
   fused?: SpriteDef
+  knot?: SpriteDef
   /**
    * Molten rock and superheated water, painted rather than blitted for the
    * same reason water is: both are translucent and both move.

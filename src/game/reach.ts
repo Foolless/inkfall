@@ -120,13 +120,21 @@ function isGroundTile(map: TileMap, tx: number, ty: number): boolean {
     t === Tile.ONEWAY ||
     t === Tile.CRUMBLE ||
     t === Tile.CRACKED ||
-    t === Tile.FUSED
+    t === Tile.FUSED ||
+    t === Tile.KNOT
   )
 }
 
 function isBlocking(map: TileMap, tx: number, ty: number): boolean {
   const t = tileAt(map, tx, ty)
-  return t === Tile.SOLID || t === Tile.SLICK || t === Tile.CRUMBLE || t === Tile.CRACKED || t === Tile.FUSED
+  return (
+    t === Tile.SOLID ||
+    t === Tile.SLICK ||
+    t === Tile.CRUMBLE ||
+    t === Tile.CRACKED ||
+    t === Tile.FUSED ||
+    t === Tile.KNOT
+  )
 }
 
 /**
@@ -149,19 +157,46 @@ function isFluidTile(map: TileMap, tx: number, ty: number): boolean {
 }
 
 /**
- * A clam's shell is ground for part of its cycle, and Nib can wait for it.
+ * Footing that is not terrain.
  *
- * Timing is a human problem; existence is the solver's. Treating a clam as
- * ground is what lets a corridor whose only footing is closed shells pass —
- * see PRD §7.2 C2, which is built entirely on that idea.
+ * Two things in the game are platforms without being tiles, and both are
+ * platforms *some of the time*: a crush clam's shell while it is closed, and a
+ * Hookline's flat top for the whole of its sweep. Timing is a human problem;
+ * existence is the solver's, and a corridor whose only footing is closed shells
+ * (PRD §7.2 C2) or a twenty-tile gap crossed on three hooks (§7.4 B2) has to
+ * pass — those rooms are built on nothing else.
+ *
+ * A hook contributes every tile along its path rather than its current
+ * position, because over one cycle it visits all of them and Nib can wait.
  */
-function clamGround(clams: readonly Clam[]): Set<number> {
-  const out = new Set<number>()
+function entityGround(level: LoadedLevel, clams: readonly Clam[]): { footing: Set<number>; solid: Set<number> } {
+  const footing = new Set<number>()
+  const solid = new Set<number>()
+  const key = (tx: number, ty: number) => ty * 100000 + tx
+
+  // A closed clam is footing *and* a wall — its shell fills the cell, so Nib
+  // cannot be inside one. A hook is only ever footing: the space its top sweeps
+  // through is the space he is standing in.
   for (const c of clams) {
     const ty = Math.floor(c.y / T)
-    for (let tx = Math.floor(c.x / T); tx < Math.floor((c.x + c.w) / T); tx++) out.add(ty * 100000 + tx)
+    for (let tx = Math.floor(c.x / T); tx < Math.floor((c.x + c.w) / T); tx++) {
+      footing.add(key(tx, ty))
+      solid.add(key(tx, ty))
+    }
   }
-  return out
+
+  for (const e of level.entities) {
+    if (e.type !== 'hookline') continue
+    const span = e.span ?? 6
+    const drop = e.drop ?? 5
+    const dir = e.dir === 'left' ? -1 : 1
+    // The whole swept rectangle: it descends `drop` rows and travels `span`
+    // columns, and every cell in that path is somewhere the top has been.
+    for (let dx = 0; dx <= span; dx++) {
+      for (let dy = 0; dy <= drop; dy++) footing.add(key(e.x + dir * dx, e.y + dy))
+    }
+  }
+  return { footing, solid }
 }
 
 export function analyseReach(level: LoadedLevel, options: ReachOptions = {}): ReachResult {
@@ -178,30 +213,47 @@ export function analyseReach(level: LoadedLevel, options: ReachOptions = {}): Re
   // and the level has to be finishable anyway.
   const opened = (tx: number, ty: number): boolean => {
     const t = tileAt(map, tx, ty)
+    if (t === Tile.KNOT) return has('inkShot')
     if (t === Tile.CRACKED) return has('inkBomb')
     if (t === Tile.FUSED) return has('heatShell')
     return false
   }
 
+  /**
+   * Magma is a hazard like urchins are — unless Heat Shell is held.
+   *
+   * §8.5 buys ninety frames of standing in it, which is enough to cross one
+   * pool and not enough to live in one. That is a *timing* question and this
+   * solver is deliberately not a timing solver (see the header), so with the
+   * shell a magma tile is passable and whether the crossing is fair stays a
+   * human question. Without it, magma is exactly as fatal as a spike.
+   */
+  const deadly = (tx: number, ty: number): boolean => {
+    const t = tileAt(map, tx, ty)
+    if (t === Tile.MAGMA) return !has('heatShell')
+    return isDeadly(map, tx, ty)
+  }
+
   const clams = level.entities
     .filter((e): e is typeof e & { type: 'clam' } => e.type === 'clam')
     .map(spawnClam)
-  const shells = clamGround(clams)
-  const isClamShell = (tx: number, ty: number) => shells.has(ty * 100000 + tx)
+  const carried = entityGround(level, clams)
+  const isFooting = (tx: number, ty: number) => carried.footing.has(ty * 100000 + tx)
+  const fillsTheCell = (tx: number, ty: number) => carried.solid.has(ty * 100000 + tx)
 
   /** Can Nib occupy this cell — enough clear headroom, and nothing lethal? */
   const open = (tx: number, ty: number): boolean => {
     if (tx < 0 || tx >= map.width || ty < 0 || ty >= map.height) return false
     for (let i = 0; i < clearance; i++) {
       if (opened(tx, ty - i)) continue
-      if (isBlocking(map, tx, ty - i) || isDeadly(map, tx, ty - i)) return false
-      if (isClamShell(tx, ty - i)) return false
+      if (isBlocking(map, tx, ty - i) || deadly(tx, ty - i)) return false
+      if (fillsTheCell(tx, ty - i)) return false
     }
     return true
   }
 
   const ground = (tx: number, ty: number): boolean =>
-    !opened(tx, ty) && (isGroundTile(map, tx, ty) || isClamShell(tx, ty))
+    !opened(tx, ty) && (isGroundTile(map, tx, ty) || isFooting(tx, ty))
 
   /**
    * Cling turns a wall into somewhere to rest.

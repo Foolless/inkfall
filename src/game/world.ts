@@ -1,7 +1,7 @@
 import { Act, isHeld, isPressed, type InputFrame } from '../engine/input.js'
 import { CHARGED_TIER, DISPLAY, ENEMIES, FULL, RULES, UPGRADES, type TierIndex } from './constants.js'
 import { boxesOverlap, type Box } from './collision.js'
-import { Tile, type TileMap } from './tilemap.js'
+import { Tile, tileAt, type TileMap } from './tilemap.js'
 import { loadLevel, type HintDef, type LevelDef, type LoadedLevel } from '../content/levels/format.js'
 import {
   createPlayer,
@@ -322,6 +322,7 @@ export function update(w: World, input: InputFrame): void {
   }
   for (const e of w.enemies) updateEnemy(enemyCtx, e)
 
+  breakKnots(w)
   updateProjectiles(w.map, w.projectiles, w.collapsed)
   detonateBombs(w)
 
@@ -460,6 +461,29 @@ function detonateBombs(w: World): void {
     p.detonated = false
     w.cues.push('blast')
     for (const tile of crackedInBlast(w.map, p, w.blastScratch)) w.collapsed.add(tile)
+  }
+}
+
+/**
+ * A kelp knot in front of a bolt. PRD §8.5: the Ink Shot "breaks kelp knots".
+ *
+ * Checked one frame *before* the bolt would hit it, so the knot opens and the
+ * bolt flies through the hole rather than dying against a tile that is about
+ * to stop existing. The alternative is asking the collision sweep to report
+ * what it hit, which would make every projectile pay for a feature one of them
+ * uses.
+ */
+function breakKnots(w: World): void {
+  for (const p of w.projectiles) {
+    if (!p.alive || !p.friendly || p.kind !== 'bolt') continue
+    const ahead = Math.sign(p.vx) * p.w
+    const tx = Math.floor((p.x + p.w / 2 + ahead) / T)
+    const ty = Math.floor((p.y + p.h / 2) / T)
+    const index = ty * w.map.width + tx
+    if (tileAt(w.map, tx, ty) !== Tile.KNOT || w.collapsed.has(index)) continue
+    w.collapsed.add(index)
+    p.alive = false
+    w.cues.push('inkKill')
   }
 }
 

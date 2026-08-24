@@ -52,6 +52,7 @@ const COLOURS: Record<TileId, string | null> = {
   [Tile.FUSED]: '#5a3a2a',
   [Tile.MAGMA]: '#ff6b35',
   [Tile.HOT]: '#8b2c1f',
+  [Tile.KNOT]: '#3d7a52',
 }
 
 /**
@@ -185,9 +186,9 @@ export class Renderer {
           continue
         }
 
-        if (t === Tile.CRACKED || t === Tile.FUSED) {
+        if (t === Tile.CRACKED || t === Tile.FUSED || t === Tile.KNOT) {
           if (w.collapsed.has(index)) continue
-          const cel = t === Tile.CRACKED ? set.cracked : set.fused
+          const cel = t === Tile.CRACKED ? set.cracked : t === Tile.FUSED ? set.fused : set.knot
           if (cel) drawSprite(ctx, this.sprites.get(cel), px, py)
           else {
             ctx.fillStyle = COLOURS[t] as string

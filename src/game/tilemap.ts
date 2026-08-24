@@ -20,6 +20,8 @@ export const Tile = {
   MAGMA: 13,
   /** Superheated water. Swimmable, on a scald timer. */
   HOT: 14,
+  /** A kelp knot. Solid until an Ink Shot bolt breaks it open. */
+  KNOT: 15,
 } as const
 export type TileId = (typeof Tile)[keyof typeof Tile]
 
@@ -38,6 +40,7 @@ export const LEGEND: Record<string, TileId> = {
   '=': Tile.SLICK,
   x: Tile.CRACKED,
   f: Tile.FUSED,
+  k: Tile.KNOT,
   m: Tile.MAGMA,
   h: Tile.HOT,
 }
@@ -159,14 +162,20 @@ export function isFluid(t: TileId): boolean {
 /**
  * Terrain an upgrade opens. PRD §8.5.
  *
- * Both are solid until the player holds the right upgrade, and both are
- * expressed the same way at runtime: the tile joins the world's `collapsed`
- * set, which is already the answer to "is this tile currently not solid".
- * Reusing that rather than threading a loadout through the collision sweep is
- * what keeps `isSolid` a function of the map and nothing else.
+ * Three kinds for three upgrades, and the symmetry is the point: a kelp knot
+ * yields to an **Ink Shot**, a cracked wall to an **Ink Bomb**, heat-fused
+ * debris to a **Heat Shell**. A player who meets one knows immediately which
+ * of the things they are carrying is the answer, and a player who does not
+ * have it yet knows there is something to come back for.
+ *
+ * All three are solid until the right thing happens to them, and all three
+ * are expressed the same way at runtime: the tile joins the world's
+ * `collapsed` set, which is already the answer to "is this tile currently not
+ * solid". Reusing that rather than threading a loadout through the collision
+ * sweep is what keeps `isSolid` a function of the map and one set.
  */
 export function isBreakable(t: TileId): boolean {
-  return t === Tile.CRACKED || t === Tile.FUSED
+  return t === Tile.CRACKED || t === Tile.FUSED || t === Tile.KNOT
 }
 
 /** Tiles that burn. Heat Shell is the only thing that survives either. */

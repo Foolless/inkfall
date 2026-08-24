@@ -139,8 +139,13 @@ export const kelpSlick = sprite('kelpSlick', RAY, [
   '1111111111111111',
 ])
 
-/** A kelp knot only an Ink Shot or a bomb opens. Pearl W2 ② sits behind one. */
-export const kelpCracked = sprite('kelpCracked', FROND, [
+/**
+ * A kelp knot. One Ink Shot bolt opens it — §8.5's "breaks kelp knots".
+ *
+ * Drawn as a tight woven ball so it reads as *grown* rather than built, which
+ * is what tells the player it is the ink and not the bomb.
+ */
+export const kelpKnot = sprite('kelpKnot', FROND, [
   '1111111111111111',
   '1221111111112211',
   '1222111111122221',
@@ -159,6 +164,26 @@ export const kelpCracked = sprite('kelpCracked', FROND, [
   '1111111111111111',
 ])
 
+/** A cracked rock face. World 2 has exactly one, and pearl ③ is behind it. */
+export const kelpCracked = sprite('kelpCracked', ROCK, [
+  '1111111111111111',
+  '1113111111111311',
+  '1111311111113111',
+  '1111131111131111',
+  '1111113113111111',
+  '1111111331111111',
+  '1333333113333331',
+  '1111111331111111',
+  '1111113113111111',
+  '1111131111131111',
+  '1111311111113111',
+  '1113111111111311',
+  '1131111111111131',
+  '1311111111111113',
+  '1111111111111111',
+  '1111111111111111',
+])
+
 export const kelp: Tileset = {
   id: 'kelp',
   solidTop: kelpTop,
@@ -167,6 +192,7 @@ export const kelp: Tileset = {
   crumble: kelpCrumble,
   hazard: kelpHazard,
   slick: kelpSlick,
+  knot: kelpKnot,
   cracked: kelpCracked,
   water: { body: KELP.KELP_DARK, surface: KELP.GOD_RAY, current: KELP.FROND },
   sky: '#0a1f18',
@@ -179,5 +205,6 @@ export const KELP_FRAMES: readonly SpriteDef[] = [
   kelpCrumble,
   kelpHazard,
   kelpSlick,
+  kelpKnot,
   kelpCracked,
 ]
