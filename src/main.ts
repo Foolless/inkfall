@@ -23,6 +23,15 @@ import {
 } from './engine/save.js'
 import { loadGhost, writeGhost } from './engine/ghosts.js'
 import { updateJuice } from './engine/juice.js'
+import { clearTelemetry, loadTelemetry, writeTelemetry } from './engine/playtest.js'
+import {
+  createTelemetry,
+  formatReport,
+  observe,
+  recordAttempt,
+  recordClear as recordPlaytestClear,
+  report,
+} from './game/telemetry.js'
 import { bindsFrom, OPTION_ROWS, rebind } from './game/options.js'
 import { idsOf, maskOf } from './game/upgrades.js'
 import { Audio } from './engine/audio/sfx.js'
@@ -77,6 +86,16 @@ const session = createSession(startLevel, {
   timerDisplay: save.settings.timerDisplay,
 })
 const audio = new Audio()
+
+/**
+ * Playtest telemetry (PLAN.md Gate 3). Observes; never steers.
+ *
+ * Kept in memory for the sitting and mirrored to its own storage key, so a
+ * playthrough spread over an evening adds up instead of resetting with the tab.
+ * Read it with `__inkfall.report()`, or copy it with `__inkfall.copyReport()`.
+ */
+const telemetry = loadTelemetry(window.localStorage) ?? createTelemetry(new Date().toISOString().slice(0, 16))
+let watched: { deaths: number; tier: number } | null = null
 
 /**
  * Audio cannot start until the player has touched something (PRD §10.4), which
@@ -296,6 +315,11 @@ window.addEventListener('keydown', (e) => {
 // volumes, the timer, the light radius, Assist Mode.
 applySettings(save.settings)
 
+/** The level's conches as tile columns, ascending — telemetry's section cuts. */
+function checkpointColumns(w: typeof session.world): number[] {
+  return w.checkpointBoxes.map((c) => Math.floor(c.box.x / 16)).sort((a, b) => a - b)
+}
+
 const fit = () => renderer.resize(window.innerWidth, window.innerHeight)
 window.addEventListener('resize', fit)
 fit()
@@ -331,7 +355,36 @@ startLoop({
     // A level just started, from the map or from the level before it.
     if (session.screen === 'playing' && screenBefore !== 'playing' && screenBefore !== 'paused') {
       loadGhostForLevel()
+      recordAttempt(telemetry, session.level.id)
     }
+    if (session.screen === 'levelClear' && screenBefore === 'playing') {
+      recordPlaytestClear(telemetry, levelBefore.id, owed.pearls.filter(Boolean).length)
+      writeTelemetry(window.localStorage, telemetry)
+    }
+    // Telemetry, before the juice: it wants where the player was on the last
+    // frame they were alive, and the juice does not care either way.
+    if (session.screen === 'playing') {
+      const w = session.world
+      observe(
+        telemetry,
+        {
+          level: session.level.id,
+          checkpoints: checkpointColumns(w),
+          widthTiles: w.map.width,
+          x: w.player.x,
+          y: w.player.y,
+          tile: 16,
+          deaths: w.player.deaths,
+          tier: w.player.tier,
+          assist: session.assist,
+        },
+        watched,
+      )
+      watched = { deaths: w.player.deaths, tier: w.player.tier }
+    } else {
+      watched = null
+    }
+
     // Animation advances on the simulation step, not the render, so a cycle
     // never speeds up on a fast display or stutters on a slow one. The juice
     // rides along for the same reason — and, unlike the animation, it is fed
@@ -384,6 +437,9 @@ declare global {
       setAssist: (on: boolean) => boolean
       optionRows: () => string[]
       listening: () => string | null
+      report: () => string
+      reportData: () => unknown
+      resetReport: () => void
       reset: () => void
       kill: () => void
       clear: () => void
@@ -425,5 +481,19 @@ window.__inkfall = {
   setAssist: (on: boolean) => setAssist(session, on),
   optionRows: () => OPTION_ROWS.map((r) => r.id),
   listening: () => session.options.listening,
+  // The playtest log, for Gate 3. Printed rather than returned as an object so
+  // it can be read straight out of a console and pasted into an issue.
+  report: () => {
+    const text = formatReport(report(telemetry))
+    // eslint-disable-next-line no-console
+    console.log(text)
+    return text
+  },
+  reportData: () => report(telemetry),
+  resetReport: () => {
+    telemetry.sections.clear()
+    telemetry.levels.clear()
+    clearTelemetry(window.localStorage)
+  },
   audio: () => ({ started: audio.started, playing: audio.nowPlaying, muted: audio.muted }),
 }
