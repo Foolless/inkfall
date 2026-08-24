@@ -7,7 +7,8 @@ in what order, and how we know each piece actually works.
 
 **Status:** Phase 1 complete and deployed — Gate 1 run once, one finding fixed, awaiting a re-test
 ✅ Phase 2 built — awaiting Gate 2
-**Last updated:** 2026-08-23
+✅ Phase 3 built — all five worlds, four new bosses, five upgrades; awaiting Gate 3
+**Last updated:** 2026-08-24
 
 ---
 
@@ -42,7 +43,7 @@ smoke test and human eyes. Chasing coverage through draw calls is wasted effort.
 |---|---|---|---|
 | **1 · Engine & Feel** ✅ | A deployable grey box where Nib moves perfectly and nothing else exists | **Go / no-go.** 3 people say the grey box alone is fun — *round 1 done, one fix applied, re-testing* | 8–12 days |
 | **2 · One Real Level** ✅ | World 1 complete: art, enemies, boss, HUD, saves, audio | A stranger finishes L1 unassisted in under 20 min — *pending* | 12–18 days |
-| **3 · All Five Levels** | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier | 20–30 days |
+| **3 · All Five Levels** ✅ | The whole game, completable start to finish | Full-game clear; every level provably completable at the Spent tier — *pending* | 20–30 days |
 | **4 · Meta & Ship** | Pearls, scoring, speedrun timers, full audio, polish, accessibility | ≥ 60% of testers reach World 3; bundle ≤ 1.5 MB | 15–22 days |
 
 **Total: roughly 55–80 focused days**, solo. That is *focused* days, not calendar days —
@@ -210,7 +211,7 @@ The tests earned their keep again, and so did looking at the screen.
 | **Landing between two crabs stomped one and was bitten by the other** | `combat.ts` | The first stomp reverses `vy`, so the second enemy in the same landing read as a walk into its flank. Contacts now resolve against one snapshot of how Nib arrived, and a landing beats a touch for the whole frame. |
 | **A one-tile gap does not exclude Full Nib** | PRD §4.4, §7.1 | 16px tiles against a 12×14 hitbox: *both* tiers fit. The design's small-only passages cannot be built at these numbers. W1 ships without one; PRD §16 lays out the three ways forward. |
 | **A straight-line reachability check can never land on a thin slab** | `reach.ts` | The line to any one-tile platform passes through the platform. Paths are now checked as an L — rise, then travel. |
-| **Pearl 3 was reachable without Deep Jet** | World 1 C1 | Which would have made the backtracking engine decorative. The gap is now over a bed of urchins with no footing, at fifteen tiles. |
+| **Pearl 3 was reachable without Deep Jet** | World 1 C1 | Which would have made the backtracking engine decorative. The gap is now over a bed of urchins with no footing, at twelve tiles. *Re-checked in Phase 3 against every upgrade except Deep Jet, at all three tiers — Cling does not open it.* |
 | **The boss arena was anchored to the map, not the floor** | `world.ts` | The King spawned inside the sand and the locked camera pointed at bedrock. The floor probe also scanned downward, which finds a platform, not a floor. |
 
 **One thing merged rather than built.** Gate 1's round-one fix added a hint
@@ -272,18 +273,54 @@ level-design bug, and it gets fixed before Phase 3.
 This is the longest phase and the most mechanical. Phases 1 and 2 built the machine; this
 phase feeds it. The main risk is not difficulty — it's throughput and drift.
 
+**Built.** All eight checkpoints are green: 903 unit tests across 33 files, 11 browser tests,
+54 kB gzipped against a 1.5 MB budget. The game runs from the title screen through five
+worlds and five bosses to a clear screen, on one save, without touching the console. Gate 3
+is the remaining step, and it needs a sitting.
+
+### What Phase 3 surfaced
+
+The reachability solver had opinions about four of the five level designs, and the
+upgrade that caused the most trouble was the one that looked simplest.
+
+| Found | Where | Why it mattered |
+|---|---|---|
+| **Cling ends vertical gating** | Worlds 3–5 | Any rock face is a ladder once it is grippable. From World 3 on, a tall shaft is not a lock and never was — only horizontal distance over a void gates anything. W5's pearl ③ had to become a one-tile island fifteen tiles clear of every face, because a three-pip fall carries fourteen. Caught twice by the solver on the same pearl. |
+| **A four-pip pearl is the only kind Deep Jet can gate** | World 5 | Spent + Deep Jet and Full without it share a reach envelope *exactly*. Every three-pip gate authored for Deep Jet was already open to a player who never found it. |
+| **The Whipkelp was stompable** | `enemies/index.ts` | `canStomp` defaulted to true for anything unarmoured, and §6.1 says ❌. Being unstompable and being armoured are different properties — a Drifter is neither armoured nor worth landing on. |
+| **Two bosses were hittable before they woke** | `bosses/types.ts` | Their parts are authored open, so a bolt landed during the wake animation. Openness now requires the boss to be *fighting*, not merely to have an open part. |
+| **The Kraken could be disassembled in its last stage** | `bosses/kraken.ts` | Suckers stayed shootable through Stage 3, so a patient player never had to fight the phase the fight exists for. |
+| **World 3's bass undercut World 4's** | `music/worlds.ts` | The descent is meant to be audible — each theme lower than the last. A G1 in the wreck sat below the vents' C2 and broke the one property the five tracks share. Re-voiced to D2. |
+| **Four crumble tiles had transparent holes** | `tilesets/*` | Visible as bedrock through the floor, and only because the palette test walks every frame of every tileset rather than a sampled few. |
+| **A pearl inside a stunned enemy has no stable position** | World 4 ② | The beat sheet put it in a Magma Snail's shell; where the shell stops sliding decided whether the pearl was collectable. Moved behind a bombed wall. |
+
+Three deviations from the PRD, each recorded in its decisions log and in the level file that
+caused it:
+
+- **Cling's teaching room is a four-tile chimney, not "a single wall too tall to dash."** One
+  wall teaches the grip but not the push-off, and the push-off is the half that makes Cling a
+  way to travel rather than a place to wait.
+- **W4's pearl ② is behind cracked crust, not inside a Snail's shell.**
+- **W5's pearl ② is behind cracked crust, not a small-only crack** — the resolution of PRD
+  §16's one-tile-gap question, revisited with World 5 in front of us exactly as v1.4 asked.
+
+**One rule earned in this phase.** Completability is tested with the loadout a player is
+*guaranteed* to be holding on arrival, and that loadout is derived from the campaign order
+and §8.5's grant table — never authored per level. An authored loadout is a second copy of
+the campaign order, and the copy is what goes stale.
+
 ### Checkpoints
 
 | # | Checkpoint | Proven by |
 |---|---|---|
-| **3.1** | **Level editor.** Extends the sprite editor: paint tiles, place entities, export `LevelDef`. | A Phase 2 level round-trips through it byte-identically |
-| **3.2** | **Upgrade system.** Ink Shot, Cling, Ink Bomb, Heat Shell, Deep Jet. Persisted, and gating what they should. | Per-upgrade tests; "no upgrade changes hit count" asserted |
-| **3.3** | **World 2 — Kelp Forest.** Currents, bubble streams. Barb Turret, Whipkelp, Eel. The Kelp Warden. | Reachability at Spent tier, with and without each upgrade |
-| **3.4** | **World 3 — Sunken Ship.** Cling traversal, Hookline riding, the rising flood. Ghost Diver. The Drowned Captain. | Reachability; flood-timer test |
-| **3.5** | **World 4 — Volcanic Vents.** Rising magma, superheated water, ash collapse. Magma Snail, Cinder Moth. The Vent Lord. | Reachability; magma-rise rate test |
-| **3.6** | **World 5 — The Abyss.** Darkness and light radius, pressure crush, Deep Jet acquisition. Lightless, Bone Shrimp. | Reachability; pressure-timer test |
-| **3.7** | **The Kraken.** Three phases, no checkpoint, ~3 minutes. | Phase-transition tests; a scripted no-damage clear |
-| **3.8** | **Chapter structure.** Tilesets, palettes and music owned by chapters, not levels — the constraint that makes 50 levels possible later. | No level defines its own tileset |
+| **3.1** ✅ | **Level editor.** Extends the sprite editor: paint tiles, place entities, export `LevelDef`. | A Phase 2 level round-trips through it byte-identically — and so does every shipped level, read off disk |
+| **3.2** ✅ | **Upgrade system.** Ink Shot, Cling, Ink Bomb, Heat Shell, Deep Jet. Persisted, and gating what they should. | Per-upgrade tests; "no upgrade changes hit count" asserted |
+| **3.3** ✅ | **World 2 — Kelp Forest.** Currents, bubble streams. Barb Turret, Whipkelp, Eel. The Kelp Warden. | Reachability at Spent tier, with and without each upgrade |
+| **3.4** ✅ | **World 3 — Sunken Ship.** Cling traversal, Hookline riding, the rising flood. Ghost Diver. The Drowned Captain. | Reachability; flood-timer test |
+| **3.5** ✅ | **World 4 — Volcanic Vents.** Rising magma, superheated water, ash collapse. Magma Snail, Cinder Moth. The Vent Lord. | Reachability; magma-rise rate test |
+| **3.6** ✅ | **World 5 — The Abyss.** Darkness and light radius, pressure crush, Deep Jet acquisition. Lightless, Bone Shrimp. | Reachability; pressure-timer test |
+| **3.7** ✅ | **The Kraken.** Three phases, no checkpoint, ~3 minutes. | Phase-transition tests; a scripted no-damage clear |
+| **3.8** ✅ | **Chapter structure.** Tilesets, palettes and music owned by chapters, not levels — the constraint that makes 50 levels possible later. | No level defines its own tileset |
 
 ### Watch for drift
 
@@ -297,6 +334,14 @@ by vigilance:
   land a level.
 - **Roster creep.** 12 enemies is the budget. A new enemy needs a lesson no existing one
   teaches, written into the PRD before it's built.
+
+**How it went.** The roster held at §6.1's twelve species. The one addition is a *spawner* —
+the vent a Bone Shrimp swarm issues from — which is a placement, not a thirteenth thing to
+learn, and `tests/roster.test.ts` pins the count at twelve-plus-the-vent and reads §6.1's
+"Stomp?" column straight off, so the budget is checked rather than remembered. Mechanic soup was caught by the level headers: each of the
+four new level files opens with the beat sheet it was authored against, and a section that
+did not serve its world's mechanic had nowhere to hide in that list. The Spent-tier
+reachability gate was never skipped, and it is what found four of the eight rows above.
 
 ### 🚦 Gate 3
 
@@ -399,7 +444,11 @@ bug report from an input log. It is also an early warning for accidental `Math.r
 **Spent-tier reachability.** An automated solver walks each level and proves it completable
 with a 2-pip budget. Because a player can always arrive at any section Spent, a section that
 requires 3 pips is a genuine unfairness bug — and it is invisible to a developer who always
-plays at Full.
+plays at Full. *Extended in Phase 3:* the solver now also carries a loadout, derived from the
+campaign order rather than authored per level — because a level whose first room is a kelp
+knot is not "unfinishable", it is finishable by everyone who can actually reach it. The same
+solver, run with the loadout a player *arrives* with, proves that any upgrade hidden inside a
+level can be got to; run without a given upgrade, it proves the pearls behind it stay shut.
 
 **The feel guarantees.** Five assertions that turn subjective regression into a red CI run.
 Their real value is permission: you can retune constants aggressively because the tests tell

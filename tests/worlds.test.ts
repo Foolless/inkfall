@@ -8,7 +8,7 @@ import { analyseReach } from '../src/game/reach.js'
 import { createWorld, update } from '../src/game/world.js'
 import { BOSS_IDS } from '../src/game/bosses/index.js'
 import { GRANTED_ON_CLEAR, UPGRADE_IDS } from '../src/game/upgrades.js'
-import { RULES, TIERS } from '../src/game/constants.js'
+import { CHARGED_TIER, FULL, RULES, SPENT, TIERS } from '../src/game/constants.js'
 import { blank } from './helpers.js'
 
 /**
@@ -412,6 +412,34 @@ describe('every level keeps the same promises', () => {
   test('every level after the first opens with something the last one gave you', () => {
     for (const d of campaign().slice(1)) {
       expect(loadoutOnArrival(d.id).length, d.id).toBeGreaterThan(0)
+    }
+  })
+
+  /**
+   * The end of the backtracking chain: with everything earned, all fifteen are
+   * collectable. §8.6 hangs Octo's unlock on this, so a pearl walled in by an
+   * authoring mistake would cost a character rather than a collectible.
+   */
+  test('a player holding every upgrade can reach all fifteen', () => {
+    for (const d of campaign()) {
+      const r = analyseReach(loadCampaignLevel(d), { tier: FULL, upgrades: [...UPGRADE_IDS] })
+      expect(r.unreachablePearls, d.id).toEqual([])
+    }
+  })
+
+  /**
+   * And the two that gate on Deep Jet stay shut without it — at *every* tier and
+   * holding everything else. Cling is the reason this is worth asserting: from
+   * World 3 on it turns any wall into a ladder, so a gate that was a drop when
+   * it was authored can quietly open two worlds later.
+   */
+  test('the Deep Jet pearls stay shut for a player holding all four other upgrades', () => {
+    const others = UPGRADE_IDS.filter((u) => u !== 'deepJet')
+    for (const id of ['w01-tidepools', 'w05-abyss']) {
+      const level = loadCampaignLevel(campaign().find((d) => d.id === id)!)
+      for (const tier of [SPENT, FULL, CHARGED_TIER]) {
+        expect(analyseReach(level, { tier, upgrades: [...others] }).unreachablePearls, `${id} @${tier}`).toContain(2)
+      }
     }
   })
 })

@@ -2,8 +2,8 @@
 
 A NES-difficulty 2D platformer about a squid descending from a sunlit tide pool to the abyss.
 
-**Status:** Phase 2 built — World 1 is playable end to end, boss included. Awaiting the
-Gate 1 and Gate 2 playtests, both of which need people.
+**Status:** Phase 3 built — all five worlds are playable, five bosses, five upgrades, start
+to finish on one save. Awaiting the Gate 1, 2 and 3 playtests, all of which need people.
 
 📄 **[docs/PRD.md](docs/PRD.md)** — what the game is
 🛠️ **[docs/PLAN.md](docs/PLAN.md)** — how it gets built: four phases, checkpoints, testing, hosting
@@ -16,8 +16,8 @@ question about where you spend those pips.
 
 - **Five hand-authored levels**, one boss each — Tide Pools, Kelp Forest, Sunken Ship,
   Volcanic Vents, and the Abyss. Roughly 25 minutes for a clean run.
-- **Three tiers, Mario-style.** A hit blows Nib's ink out and shrinks him from Full (3 pips)
-  to Spent (2 pips, but fits through 1-tile gaps); another kills. A rare **Ink Core** promotes
+- **Three tiers, Mario-style.** A hit blows Nib's ink out and drops him from Full (3 pips)
+  to Spent (2 pips, and a little more jump); another kills. A rare **Ink Core** promotes
   him to Charged, where the dash itself kills what it passes through. The ink meter *is* the
   health bar.
 - Sparse checkpoints, 3 lives, 3 continues. The difficulty lives in the distance between
@@ -46,17 +46,20 @@ how v1 is built.
 ```bash
 npm install
 npm run dev       # World 1, at http://localhost:5173
-npm run verify    # typecheck + lint + 521 unit tests + build + bundle size
-npm run smoke     # 8 Playwright browser tests
+npm run verify    # typecheck + lint + 903 unit tests + build + bundle size
+npm run smoke     # 11 Playwright browser tests
 ```
 
-`npm run dev` also serves the sprite editor at `/tools/sprite-editor/`, and
-`?level=greybox` reaches the Phase 1 proving ground.
+`npm run dev` also serves the sprite editor at `/tools/sprite-editor/` and the level editor
+at `/tools/level-editor/`, which paints the ASCII grid and writes the exact `LevelDef`
+literal the level files are authored as. `?level=w03-ship` starts anywhere in the campaign,
+and `?level=greybox` reaches the Phase 1 proving ground.
 
 **Arrows/WASD** move, **Space** jumps, **Shift** runs, **X** is the ink dash — *hold a
-direction to aim it*, including **↑** for the up-dash and **↑+→** for diagonals. **Esc**
-pauses, **M** mutes, **R** restarts, **F1** opens the debug overlay (hitboxes, velocity,
-frame-time graph).
+direction to aim it*, including **↑** for the up-dash and **↑+→** for diagonals. **C** fires
+an ink bolt once World 1 is cleared, and **↓+C** throws an ink bomb once World 3 is: one key
+for ranged ink, because the game deliberately fits on one hand. **Esc** pauses, **M** mutes,
+**R** restarts, **F1** opens the debug overlay (hitboxes, velocity, frame-time graph).
 
 ## Building it
 
@@ -69,8 +72,26 @@ at a public URL and a gate that a machine can't pass for you:
 2. **One Real Level** ✅ — World 1 complete, proving the whole pipeline once instead of five
    times. Art, three enemies, three hazards, the Hermit King, a HUD, saves, a runtime
    chiptune synth, and a solver that proves the level finishable on two pips.
-3. **All Five Levels** — the full descent, completable start to finish.
+3. **All Five Levels** ✅ — the full descent, completable start to finish. Four more worlds,
+   nine more enemies, four more bosses, the five ink upgrades, and a level editor that
+   round-trips every shipped level byte for byte.
 4. **Meta & Ship** — pearls, scoring, speedrun timers, audio, polish, accessibility.
+
+## What Phase 3 found
+
+- **Cling ends vertical gating.** Any rock face is a ladder once it is grippable, so from
+  World 3 on, only horizontal distance over a void gates anything. World 5's third pearl is a
+  one-tile island fifteen tiles clear of every wall, because a three-pip fall carries
+  fourteen — and the solver caught the two earlier versions that weren't.
+- **A four-pip pearl is the only kind Deep Jet can gate.** Spent + Deep Jet and Full without
+  it reach exactly the same places, so any gate sized for three pips is already open to a
+  player who never found the upgrade.
+- **Completability needs a loadout, not an empty pair of hands.** World 2's first room is a
+  kelp knot only an Ink Shot opens, and everyone who gets there earned one. The loadout is
+  derived from the campaign order rather than authored per level, so adding an upgrade
+  re-checks every later world for free.
+- **The one-tile gap is settled**: the claim is dropped for v1 (PRD §16), and the tier
+  difference lives entirely in the pip budget.
 
 ## What Phase 2 found
 
@@ -82,7 +103,7 @@ Four things worth knowing before touching this code, all written up in
   level-design problem.
 - **A one-tile gap does not exclude Full Nib.** With 16px tiles and a 12×14 hitbox, both
   drawn tiers fit through one — so the "small-only passage" idea in PRD §4.4 and §7.1 has no
-  geometry behind it yet. §16 lays out the options.
+  geometry behind it. §16 laid out three ways forward; Phase 3 took the cheap one.
 - **The reachability solver is the level designer's editor**, not just a CI check. It caught
   a pearl that was supposed to need a World 5 upgrade and did not.
 - **2.7's judgement call is open.** The synth is built and tested; nobody has listened to it.
