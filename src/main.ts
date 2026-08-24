@@ -58,6 +58,17 @@ const session = createSession(startLevel, {
   // and a pearl banked in World 2 must be known by the time World 2 is
   // replayed later in the same sitting.
   foundPearls: (id) => save.progress.pearls[id] ?? [],
+  // The map reads the save every time it opens, so a level cleared this
+  // session unlocks the next one without a reload.
+  progress: () => ({
+    unlocked: save.progress.unlocked,
+    cleared: save.progress.cleared,
+    pearls: save.progress.pearls,
+    bestTimes: save.records.bestTimes[save.characters.selected] ?? {},
+  }),
+  // A level named on the debug route is entered directly: `?level=w03-ship`
+  // means that level, not the map's idea of where the player got to.
+  direct: requested !== null,
 })
 const audio = new Audio()
 
@@ -190,8 +201,11 @@ startLoop({
       session.pendingScore = false
       bankScore()
     }
-    // A new world is a new chapter, and a chapter owns the music.
-    if (session.level !== levelBefore) playChapterTheme()
+    // A new world is a new chapter, and a chapter owns the music. Also on the
+    // way out of the map, where the player may have picked any world at all.
+    if (session.level !== levelBefore || (screenBefore === 'worldMap' && session.screen === 'playing')) {
+      playChapterTheme()
+    }
     // Animation advances on the simulation step, not the render, so a cycle
     // never speeds up on a fast display or stutters on a slow one.
     updateAnim(anim, session.world.player)

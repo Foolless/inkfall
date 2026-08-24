@@ -12,11 +12,12 @@ import { Act, isPressed, type InputFrame } from '../engine/input.js'
 import { RULES } from './constants.js'
 import { clearTally, tallyTotal, type ClearSummary, type TallyLine } from './score.js'
 import { createWorld, update as updateWorld, type World } from './world.js'
-import { campaign, grantedBy } from '../content/levels/index.js'
+import { campaign, grantedBy, levelDef } from '../content/levels/index.js'
 import { UPGRADE_BIT, type UpgradeId } from './upgrades.js'
+import { buildMap, furthestUnlocked, moveCursor, NO_PROGRESS, type MapNode, type MapProgress } from './map.js'
 import type { LevelDef } from '../content/levels/format.js'
 
-export type Screen = 'title' | 'playing' | 'paused' | 'levelClear' | 'gameOver' | 'gameClear'
+export type Screen = 'title' | 'worldMap' | 'playing' | 'paused' | 'levelClear' | 'gameOver' | 'gameClear'
 
 /** How many frames the tally holds between lines as it counts up. */
 export const TALLY_LINE_FRAMES = 24
@@ -86,6 +87,34 @@ export interface Session {
    */
   foundPearls: (levelId: string) => readonly boolean[]
   /**
+   * The world map's nodes, rebuilt from the save every time the map opens.
+   *
+   * Rebuilt rather than mutated because clearing a level changes three of the
+   * things a node shows — locked, cleared, and the best time — and the save is
+   * the authority on all three.
+   */
+  nodes: MapNode[]
+  /** Which node the map's cursor is on. */
+  cursor: number
+  /**
+   * This level had already been cleared when the run entered it.
+   *
+   * A replay returns to the map when it is finished rather than rolling into
+   * the next world: somebody who went back to World 2 for a pearl wants the
+   * map, not World 3 again.
+   */
+  replay: boolean
+  /** Reads the save's progress. See `foundPearls` for why this is a function. */
+  progress: () => MapProgress
+  /**
+   * Skip the map: the title starts `level` immediately.
+   *
+   * The map is the campaign's front door, so anything that is *not* campaign
+   * content — the grey box, a test fixture — is entered directly, and so is a
+   * level named explicitly on the debug route. Neither has a node to sit on.
+   */
+  direct: boolean
+  /**
    * Frames since the session began, ticking on every screen.
    *
    * Menus need a clock and the world's does not run on the title, so this is
@@ -122,6 +151,10 @@ export interface SessionOptions {
   assist?: boolean
   /** Pearls already banked, by level id. See `Session.foundPearls`. */
   foundPearls?: (levelId: string) => readonly boolean[]
+  /** The save's progress, for the world map. */
+  progress?: () => MapProgress
+  /** Start `level` straight from the title, with no map. See `Session.direct`. */
+  direct?: boolean
 }
 
 /** A fresh save has found nothing anywhere. */
@@ -131,6 +164,9 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
   const upgrades = options.upgrades ?? 0
   const assist = options.assist ?? false
   const foundPearls = options.foundPearls ?? (() => NONE_FOUND)
+  const progress = options.progress ?? (() => NO_PROGRESS)
+  const nodes = buildMap(progress())
+  const direct = options.direct ?? !campaign().some((d) => d.id === level.id)
   return {
     screen: 'title',
     level,
@@ -150,6 +186,11 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
     granted: [],
     assist,
     foundPearls,
+    nodes,
+    cursor: furthestUnlocked(nodes),
+    replay: false,
+    progress,
+    direct,
     uiFrames: 0,
     pendingSave: false,
     pendingScore: false,
@@ -191,13 +232,22 @@ export function updateSession(s: Session, input: InputFrame): void {
   s.uiFrames++
   switch (s.screen) {
     case 'title':
-      if (confirmed(input)) startRun(s)
+      if (confirmed(input)) {
+        if (s.direct) startRun(s)
+        else openMap(s)
+      }
+      return
+    case 'worldMap':
+      stepMap(s, input)
       return
     case 'playing':
       stepLevel(s, input)
       return
     case 'paused':
       if (isPressed(input, Act.Pause)) s.screen = 'playing'
+      // Quit to the map (§11.1). The level is abandoned, not failed: nothing
+      // is re-locked and no continue is spent — the same terms a replay gets.
+      else if (isPressed(input, Act.Down)) openMap(s)
       return
     case 'levelClear':
       s.tallyClock++
@@ -218,6 +268,39 @@ export function updateSession(s: Session, input: InputFrame): void {
   }
 }
 
+/**
+ * Open the world map, rebuilt from whatever the save now says.
+ *
+ * The cursor lands on the deepest level the player may enter, which is the
+ * game's continue: progress had been written to the save since Phase 2 and
+ * never read back, so every session started at the tide pools regardless.
+ */
+export function openMap(s: Session): void {
+  s.nodes = buildMap(s.progress())
+  s.cursor = furthestUnlocked(s.nodes)
+  s.screen = 'worldMap'
+}
+
+function stepMap(s: Session, input: InputFrame): void {
+  if (isPressed(input, Act.Up)) s.cursor = moveCursor(s.nodes, s.cursor, -1)
+  if (isPressed(input, Act.Down)) s.cursor = moveCursor(s.nodes, s.cursor, 1)
+  if (!confirmed(input)) return
+
+  const node = s.nodes[s.cursor]
+  if (!node || !node.unlocked) return
+  s.level = levelDef(node.id)
+  s.replay = node.cleared
+  startRun(s)
+}
+
+/**
+ * Begin a fresh run at the selected level.
+ *
+ * Full lives, full continues, and a score of zero — including on a replay,
+ * where §11.1 says the run "starts a fresh score and can set a new personal
+ * best". A replay costs nothing and re-locks nothing; the only thing it can do
+ * is add to what the save already holds.
+ */
 function startRun(s: Session): void {
   s.world = rebuild(s, s.level)
   s.lives = RULES.START_LIVES
@@ -368,7 +451,17 @@ function finishLevel(s: Session): void {
 
   const order = campaign().findIndex((d) => d.id === s.level.id)
   if (order < 0) {
+    // Not campaign content — the grey box. A proving ground has nothing after
+    // it, so it goes back to where it was started from.
     s.screen = 'title'
+    return
+  }
+
+  // A level that was already cleared before this run entered it hands back to
+  // the map rather than rolling on. Somebody who went back to World 2 for a
+  // pearl wants the map, not World 3 again (§11.1).
+  if (s.replay) {
+    openMap(s)
     return
   }
 

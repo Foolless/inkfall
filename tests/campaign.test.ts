@@ -32,10 +32,20 @@ function clearLevel(s: Session): void {
   press(s, Act.Jump)
 }
 
+/**
+ * A run started the way a player starts one: title, world map, first level.
+ *
+ * Driven through the map rather than around it, because the map is the
+ * campaign's front door as of checkpoint 4.4 and a helper that skipped it
+ * would stop testing the flow it claims to test.
+ */
 function startedRun(): Session {
   const s = createSession(campaign()[0]!)
   press(s, Act.Jump)
+  expect(s.screen).toBe('worldMap')
+  press(s, Act.Jump)
   expect(s.screen).toBe('playing')
+  expect(s.level.id).toBe(campaign()[0]!.id)
   return s
 }
 

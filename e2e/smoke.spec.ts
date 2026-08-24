@@ -38,7 +38,8 @@ test('the game loads and runs', async ({ page }) => {
 
   await page.goto('/')
   await expect(page.locator('canvas#game')).toBeVisible()
-  await page.keyboard.press('Space') // past the title, into World 1
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await confirmUntil(page, 'playing') // title, world map, World 1
 
   // The canvas must be at the internal resolution, integer-scaled by CSS.
   const size = await page.locator('canvas#game').evaluate((el: HTMLCanvasElement) => ({
@@ -96,8 +97,10 @@ test('title to play to level clear to the next world, without touching the conso
   await page.waitForFunction(() => window.__inkfall !== undefined)
   expect(await page.evaluate(() => window.__inkfall!.screen())).toBe('title')
 
+  // The map is the campaign's front door as of 4.4: title, map, then a level.
   await page.keyboard.press('Space')
-  await page.waitForFunction(() => window.__inkfall!.screen() === 'playing')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'worldMap')
+  await confirmUntil(page, 'playing')
   expect(await page.evaluate(() => window.__inkfall!.lives())).toBe(3)
 
   await page.keyboard.press('Escape')
@@ -123,7 +126,7 @@ test('title to play to level clear to the next world, without touching the conso
 test('the theme follows the chapter across a world boundary', async ({ page }) => {
   await page.goto('/')
   await page.waitForFunction(() => window.__inkfall !== undefined)
-  await page.keyboard.press('Space')
+  await confirmUntil(page, 'playing')
   await page.waitForFunction(() => window.__inkfall!.audio().started)
   expect(await page.evaluate(() => window.__inkfall!.audio().playing)).toBe('world1')
 
@@ -303,6 +306,47 @@ test('assist mode is one key on the title, and it survives a reload', async ({ p
   await page.reload()
   await page.waitForFunction(() => window.__inkfall !== undefined)
   expect(await page.evaluate(() => window.__inkfall!.assist())).toBe(true)
+  expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
+})
+
+/**
+ * The world map, in a real browser: it renders, it remembers, and it is the
+ * way back into a cleared level.
+ *
+ * The remembering is the part worth a browser test. Progress had been written
+ * to the save since Phase 2 and never read back, so every session began at the
+ * tide pools however far anyone had got — a bug that only exists across a
+ * reload, which is exactly what a unit test cannot see.
+ */
+test('the world map remembers how far you got, across a reload', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  await page.goto('/')
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await confirmUntil(page, 'playing')
+  await page.evaluate(() => window.__inkfall!.clear())
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'levelClear')
+  await confirmUntil(page, 'playing')
+  expect(await page.evaluate(() => window.__inkfall!.level())).toBe('w02-kelp')
+
+  // Reload: the map must open on World 2, not send the player back to World 1.
+  await page.reload()
+  await page.waitForFunction(() => window.__inkfall !== undefined)
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'worldMap')
+  await confirmUntil(page, 'playing')
+  expect(await page.evaluate(() => window.__inkfall!.level())).toBe('w02-kelp')
+
+  // And World 1 is still reachable, because five pearls depend on going back.
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'paused')
+  await page.keyboard.press('ArrowDown')
+  await page.waitForFunction(() => window.__inkfall!.screen() === 'worldMap')
+  await page.keyboard.press('ArrowUp')
+  await confirmUntil(page, 'playing')
+  expect(await page.evaluate(() => window.__inkfall!.level())).toBe('w01-tidepools')
+
   expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
 })
 

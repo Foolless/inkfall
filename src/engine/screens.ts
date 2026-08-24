@@ -10,6 +10,7 @@
 import { DISPLAY } from '../game/constants.js'
 import { formatScore, formatTime, tallyRevealed, tallyShown, type Session } from '../game/state.js'
 import { SHARED, SHALLOWS } from '../content/palettes.js'
+import { mapTotals } from '../game/map.js'
 import { drawText, drawTextCentred, drawTextRight } from './text.js'
 
 const W = DISPLAY.WIDTH
@@ -63,6 +64,84 @@ export function drawPause(ctx: CanvasRenderingContext2D): void {
   dim(ctx)
   drawTextCentred(ctx, 'PAUSED', W / 2, 70, SHARED.UI_TEXT, { scale: 2 })
   drawTextCentred(ctx, 'ESC TO RESUME', W / 2, 100, SHARED.UI_DIM)
+  drawTextCentred(ctx, 'R RESTART LEVEL', W / 2, 112, SHARED.UI_DIM)
+  drawTextCentred(ctx, '↓ QUIT TO MAP', W / 2, 124, SHARED.UI_DIM)
+}
+
+/**
+ * The world map: a vertical descent, one node per level. PRD §11.1.
+ *
+ * Drawn from `s.nodes`, which is built from the level registry — so a sixth
+ * level is a sixth node and nothing here changes (§12.7). The list scrolls
+ * rather than being sized to five, for the same reason.
+ *
+ * This is where progression is meant to be *felt*, so the shape carries the
+ * meaning: the line runs down the screen, the water darkens as it goes, and a
+ * locked node is a rung you can see and cannot stand on.
+ */
+export function drawWorldMap(ctx: CanvasRenderingContext2D, s: Session): void {
+  ctx.fillStyle = SHARED.VOID
+  ctx.fillRect(0, 0, W, H)
+
+  const rows = s.nodes.length
+  const step = 26
+  const top = 30
+  // Scroll so the cursor is always on screen, however long the list becomes.
+  const view = H - top - 24
+  const span = Math.max(0, rows * step - view)
+  const scroll = Math.min(span, Math.max(0, s.cursor * step - view / 2 + step))
+
+  // The water, darkening with depth. Behind everything, and it is the reason
+  // the map is vertical rather than a grid of boxes.
+  for (let i = 0; i < 7; i++) {
+    ctx.fillStyle = i < 2 ? SHALLOWS.SHALLOW_DEEP : i < 4 ? '#173845' : '#0b1a22'
+    ctx.globalAlpha = 0.3 - i * 0.035
+    ctx.fillRect(0, i * 26, W, 26)
+  }
+  ctx.globalAlpha = 1
+
+  drawTextCentred(ctx, 'THE DESCENT', W / 2, 12, SHARED.INK_CYAN)
+
+  const lineX = 40
+  ctx.fillStyle = '#12222c'
+  ctx.fillRect(lineX, top - 6, 1, Math.min(view + 12, rows * step))
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, top - 10, W, view + 16)
+  ctx.clip()
+
+  s.nodes.forEach((node, i) => {
+    const y = top + i * step - scroll
+    if (y < top - step || y > top + view + step) return
+    const here = i === s.cursor
+    const ink = node.unlocked ? (here ? SHARED.INK_CYAN : SHARED.UI_TEXT) : SHARED.UI_DIM
+
+    // The rung. Filled once cleared, hollow while it is still ahead of you.
+    ctx.fillStyle = node.unlocked ? ink : '#1b262e'
+    if (node.cleared) ctx.fillRect(lineX - 3, y + 1, 7, 7)
+    else {
+      ctx.strokeStyle = ctx.fillStyle
+      ctx.lineWidth = 1
+      ctx.strokeRect(lineX - 2.5, y + 1.5, 6, 6)
+    }
+
+    if (here) drawText(ctx, '>', lineX - 16, y + 1, SHARED.INK_CYAN)
+    drawText(ctx, node.unlocked ? node.name.toUpperCase() : '- - - -', lineX + 14, y + 1, ink)
+
+    if (!node.unlocked) return
+    // Pearls, and the best time if there is one. Right-aligned so the eye can
+    // run down the column rather than hunting along each row.
+    drawTextRight(ctx, node.pearls.map((p) => (p ? '*' : 'o')).join(''), W - 10, y + 1, SHARED.PEARL)
+    if (node.bestSeconds !== null) {
+      drawTextRight(ctx, formatTime(Math.round(node.bestSeconds * 60)), W - 42, y + 1, SHARED.UI_DIM)
+    }
+  })
+  ctx.restore()
+
+  const totals = mapTotals(s.nodes)
+  drawText(ctx, `PEARLS ${totals.pearls}/${totals.pearlsPossible}`, 10, H - 12, SHARED.PEARL)
+  drawTextRight(ctx, pulse(s.uiFrames) ? 'SPACE TO DIVE' : '', W - 10, H - 12, SHARED.UI_TEXT)
 }
 
 /**
