@@ -15,6 +15,7 @@ import { createWorld, update as updateWorld, type World } from './world.js'
 import { campaign, grantedBy, levelDef } from '../content/levels/index.js'
 import { UPGRADE_BIT, type UpgradeId } from './upgrades.js'
 import { buildMap, furthestUnlocked, moveCursor, NO_PROGRESS, type MapNode, type MapProgress } from './map.js'
+import { createRecorder, finishRecording, resetRecorder, sample, type GhostRecorder, type GhostTrack } from './ghost.js'
 import type { LevelDef } from '../content/levels/format.js'
 
 export type Screen = 'title' | 'worldMap' | 'playing' | 'paused' | 'levelClear' | 'gameOver' | 'gameClear'
@@ -38,6 +39,22 @@ export interface Session {
    * clock is part of what a death costs.
    */
   levelFrames: number
+  /**
+   * The run timer: the sum of the level timers already finished (§8.4).
+   *
+   * A *sum*, not a wall clock, which is the rule that makes routing the skill
+   * rather than menuing — time spent on the map, on a tally or on a pause
+   * screen is not in it, and neither is the time between sessions.
+   */
+  runFrames: number
+  /**
+   * The personal best for the level being played, in frames, or null.
+   *
+   * Snapshotted when the level starts rather than read at the end, so the
+   * split is measured against the time the player walked in holding — beating
+   * your PB must not move the target you were beating.
+   */
+  bestFrames: number | null
   /** Deaths already charged to the life counter, so one death costs one life. */
   deathsCharged: number
   /**
@@ -139,7 +156,32 @@ export interface Session {
    * beating the last, so a good run pushed out nine other people's.
    */
   pendingScore: boolean
+  /**
+   * The run being recorded, for a personal-best ghost (§8.4).
+   *
+   * Always recording, whether or not the ghost is switched on for *display* —
+   * the setting decides whether a silhouette is drawn, not whether a time
+   * worth keeping gets kept. Recording costs two rounded integers every six
+   * frames.
+   */
+  recorder: GhostRecorder
+  /**
+   * A finished recording waiting to be stored, or null. Drained by the host.
+   *
+   * Set only when the level was finished *faster than the personal best*, so
+   * the stored ghost is always the ghost of the best run.
+   */
+  pendingGhost: GhostTrack | null
+  /** The ghost to draw, handed in by the host when the level starts. */
+  ghost: GhostTrack | null
+  /**
+   * What the HUD's clock shows. §8.4 makes it a setting and off by default:
+   * a timer nobody asked for is a scoreboard on a game about exploring.
+   */
+  timerDisplay: TimerDisplay
 }
+
+export type TimerDisplay = 'off' | 'level' | 'run' | 'both'
 
 /** Par clocks are per level; this is what an unauthored one falls back to. */
 export const DEFAULT_PAR_SECONDS = 300
@@ -155,6 +197,8 @@ export interface SessionOptions {
   progress?: () => MapProgress
   /** Start `level` straight from the title, with no map. See `Session.direct`. */
   direct?: boolean
+  /** What the HUD's clock shows. §8.4 — off by default. */
+  timerDisplay?: TimerDisplay
 }
 
 /** A fresh save has found nothing anywhere. */
@@ -175,6 +219,8 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
     continues: RULES.CONTINUES,
     score: 0,
     levelFrames: 0,
+    runFrames: 0,
+    bestFrames: null,
     deathsCharged: 0,
     deaths: 0,
     summary: null,
@@ -194,7 +240,16 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
     uiFrames: 0,
     pendingSave: false,
     pendingScore: false,
+    recorder: createRecorder(),
+    pendingGhost: null,
+    ghost: null,
+    timerDisplay: options.timerDisplay ?? 'off',
   }
+}
+
+/** The run total as it stands: finished levels plus the one in progress. */
+export function runFramesNow(s: Session): number {
+  return s.runFrames + s.levelFrames
 }
 
 /**
@@ -307,6 +362,7 @@ function startRun(s: Session): void {
   s.continues = RULES.CONTINUES
   s.score = 0
   s.deaths = 0
+  s.runFrames = 0
   beginLevel(s)
   s.screen = 'playing'
 }
@@ -319,6 +375,8 @@ function endRun(s: Session): void {
 
 function beginLevel(s: Session): void {
   s.levelFrames = 0
+  s.bestFrames = pbFrames(s, s.level.id)
+  resetRecorder(s.recorder)
   s.deathsCharged = 0
   s.summary = null
   s.tally = []
@@ -351,6 +409,9 @@ function stepLevel(s: Session, input: InputFrame): void {
 
   updateWorld(w, input)
   s.levelFrames++
+  // Sampled after the step, so frame 0 is where the level starts rather than
+  // where the player spawned one frame before being able to move.
+  sample(s.recorder, w.player.x, w.player.y)
 
   // Shells and pearls pay out in lives; the world counts them, the run banks them.
   if (w.livesOwed > 0) {
@@ -412,6 +473,12 @@ function clearLevel(s: Session): void {
   s.tally = clearTally(s.summary)
   s.tallyClock = 0
   s.screen = 'levelClear'
+
+  // Only a personal best is worth keeping. A first run has nothing to beat, so
+  // it always is one.
+  if (s.bestFrames === null || s.levelFrames < s.bestFrames) {
+    s.pendingGhost = finishRecording(s.recorder, s.level.id)
+  }
 }
 
 /**
@@ -444,6 +511,9 @@ function bankUpgrades(s: Session, earned: UpgradeId[]): void {
  */
 function finishLevel(s: Session): void {
   s.score += tallyTotal(s.tally)
+  // The run timer is the sum of the level timers (§8.4) — added here, where a
+  // level is actually finished, so a level abandoned to the map adds nothing.
+  s.runFrames += s.levelFrames
   s.pendingSave = true
 
   const grant = grantedBy(s.level.id)
@@ -478,6 +548,34 @@ function finishLevel(s: Session): void {
   s.world = rebuild(s, next)
   beginLevel(s)
   s.screen = 'playing'
+}
+
+/**
+ * The personal best for a level, in frames, or null if it has never been run.
+ *
+ * Stored as seconds because that is what a save is readable as; converted here
+ * because §8.4 asks for frame accuracy and a split of "−0.02" is meaningless
+ * if the number it came from was rounded on the way in.
+ */
+export function pbFrames(s: Session, levelId: string): number | null {
+  const best = s.progress().bestTimes[levelId]
+  return best === undefined || best === null ? null : Math.round(best * 60)
+}
+
+/**
+ * This level's split against the personal best, in frames. Negative is faster.
+ *
+ * Null when there is nothing to compare against — a first run has no split, and
+ * showing `+0.00` for it would be a lie about a race nobody ran.
+ */
+export function levelSplit(s: Session): number | null {
+  return s.bestFrames === null ? null : s.levelFrames - s.bestFrames
+}
+
+/** A split as `-2.31` / `+4.02`, per §8.4. Always two decimals and a sign. */
+export function formatSplit(frames: number): string {
+  const seconds = frames / 60
+  return `${seconds < 0 ? '-' : '+'}${Math.abs(seconds).toFixed(2)}`
 }
 
 /** The next level in the campaign, or null at the end of the game. */

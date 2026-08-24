@@ -26,6 +26,12 @@ export const CURRENT_VERSION = 1
 export interface StorageLike {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
+  /**
+   * Optional: only the ghost store removes anything, and the save itself never
+   * does. A blob we cannot read is copied to `.bak` and left exactly where it
+   * was — deleting somebody's progress is not a recovery strategy.
+   */
+  removeItem?(key: string): void
 }
 
 export interface Progress {

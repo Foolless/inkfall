@@ -8,7 +8,7 @@
  */
 
 import { DISPLAY } from '../game/constants.js'
-import { formatScore, formatTime, tallyRevealed, tallyShown, type Session } from '../game/state.js'
+import { formatScore, formatSplit, formatTime, levelSplit, tallyRevealed, tallyShown, type Session } from '../game/state.js'
 import { SHARED, SHALLOWS } from '../content/palettes.js'
 import { mapTotals } from '../game/map.js'
 import { drawText, drawTextCentred, drawTextRight } from './text.js'
@@ -175,6 +175,15 @@ export function drawLevelClear(ctx: CanvasRenderingContext2D, s: Session): void 
 
   drawText(ctx, 'TIME', left, totalY + 14, SHARED.UI_DIM)
   drawTextRight(ctx, formatTime(s.levelFrames), right, totalY + 14, SHARED.UI_DIM)
+
+  // The split against the personal best (§8.4). Green for faster, red for
+  // slower, and nothing at all on a first run — there is no race to report.
+  const split = levelSplit(s)
+  if (split !== null) {
+    drawTextRight(ctx, formatSplit(split), right, totalY + 25, split <= 0 ? '#7fd67f' : '#e0705c')
+  } else if (s.bestFrames === null) {
+    drawTextRight(ctx, 'FIRST RUN', right, totalY + 25, SHARED.UI_DIM)
+  }
 
   if (pulse(s.tallyClock)) drawTextCentred(ctx, 'PRESS SPACE', W / 2, H - 12, SHARED.UI_TEXT)
 }

@@ -20,6 +20,7 @@ import {
   writeSave,
   type SaveData,
 } from './engine/save.js'
+import { loadGhost, writeGhost } from './engine/ghosts.js'
 import { idsOf, maskOf } from './game/upgrades.js'
 import { Audio, type Cue } from './engine/audio/sfx.js'
 import { trackFor } from './content/music/world1.js'
@@ -70,6 +71,7 @@ const session = createSession(startLevel, {
   // A level named on the debug route is entered directly: `?level=w03-ship`
   // means that level, not the map's idea of where the player got to.
   direct: requested !== null,
+  timerDisplay: save.settings.timerDisplay,
 })
 const audio = new Audio()
 
@@ -129,6 +131,31 @@ function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number
   // found on any level — so this is checked on every clear, not on the last.
   save = checkUnlocks(save)
   writeSave(window.localStorage, save)
+}
+
+/**
+ * Load the ghost for whatever level is about to be played, if ghosts are on.
+ *
+ * Read at the start of a level rather than held for the session: the player can
+ * pick any level from the map, and the silhouette has to belong to the one they
+ * picked. A failure to read one is not an error — it just means no ghost.
+ */
+function loadGhostForLevel(): void {
+  session.ghost = save.settings.ghost ? loadGhost(window.localStorage, save.characters.selected, session.level.id) : null
+}
+
+/**
+ * Store a ghost the session says is a personal best.
+ *
+ * Kept apart from `persist` because it writes to a different key for a
+ * different reason: a quota error while storing a few thousand coordinates
+ * must never be able to take somebody's pearls with it.
+ */
+function bankGhost(): void {
+  const track = session.pendingGhost
+  session.pendingGhost = null
+  if (!track || !canWrite) return
+  writeGhost(window.localStorage, save.characters.selected, track)
 }
 
 /**
@@ -205,10 +232,15 @@ startLoop({
       session.pendingScore = false
       bankScore()
     }
+    if (session.pendingGhost) bankGhost()
     // A new world is a new chapter, and a chapter owns the music. Also on the
     // way out of the map, where the player may have picked any world at all.
     if (session.level !== levelBefore || (screenBefore === 'worldMap' && session.screen === 'playing')) {
       playChapterTheme()
+    }
+    // A level just started, from the map or from the level before it.
+    if (session.screen === 'playing' && screenBefore !== 'playing' && screenBefore !== 'paused') {
+      loadGhostForLevel()
     }
     // Animation advances on the simulation step, not the render, so a cycle
     // never speeds up on a fast display or stutters on a slow one.

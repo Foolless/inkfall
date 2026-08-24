@@ -6,7 +6,8 @@ import type { Camera } from './camera.js'
 import { frameFor, paletteFor, type Anim } from './anim.js'
 import { enemyFrame } from './enemy-anim.js'
 import { bubbleBox, clamState, isTelegraphing, pressureLoad } from '../game/hazards.js'
-import { formatScore, formatTime, type Session } from '../game/state.js'
+import { formatScore, formatTime, runFramesNow, type Session } from '../game/state.js'
+import { ghostAt } from '../game/ghost.js'
 import { SHARED } from '../content/palettes.js'
 import { drawText, drawTextCentred, drawTextRight, textWidth } from './text.js'
 import { clamp } from './camera.js'
@@ -126,6 +127,9 @@ export class Renderer {
     this.drawEnemies(w, ox, oy)
     this.drawBoss(w, ox, oy)
     this.drawProjectiles(w, ox, oy)
+    // Under Nib, always: a silhouette that occludes the thing it is pacing is
+    // worse than no silhouette at all.
+    this.drawGhost(s, ox, oy)
     this.drawPlayer(w, ox, oy, anim)
     // The abyss, last of all: everything above is drawn and then most of it is
     // taken away again. PRD §7.6 — a 5-tile radius, and the lures.
@@ -608,6 +612,27 @@ export class Renderer {
     drawSprite(ctx, this.sprites.get(frame, p.facing < 0, palette), x, y)
   }
 
+  /**
+   * The personal-best ghost. PRD §8.4 — a translucent silhouette, off by default.
+   *
+   * A filled box rather than a sprite, and deliberately: the ghost is a
+   * *position*, and drawing it in Nib's own frames invites reading it as a
+   * second player. What a runner needs from it is "am I ahead or behind", which
+   * a shape answers as well as a portrait and more legibly at 12 by 14.
+   */
+  private drawGhost(s: Session, ox: number, oy: number): void {
+    if (s.screen !== 'playing') return
+    const at = ghostAt(s.ghost, s.level.id, s.levelFrames)
+    if (!at) return
+
+    const { ctx } = this
+    const p = s.world.player
+    ctx.globalAlpha = 0.28
+    ctx.fillStyle = SHARED.NIB_PALE
+    ctx.fillRect(Math.floor(at.x - ox), Math.floor(at.y - oy), p.w, p.h)
+    ctx.globalAlpha = 1
+  }
+
   /** A dash leaves a fading trail behind it — opaque black while Charged. */
   private drawInkTrail(
     p: { vx: number; vy: number; tier: number },
@@ -714,6 +739,14 @@ export class Renderer {
       }
     }
 
-    drawTextRight(ctx, formatTime(s.levelFrames), DISPLAY.WIDTH - 4, 5, SHARED.UI_TEXT)
+    // §8.4's timer, off unless asked for. `run` is the sum of level timers, so
+    // the two clocks differ by everything spent on menus and on earlier levels.
+    if (s.timerDisplay === 'level' || s.timerDisplay === 'both') {
+      drawTextRight(ctx, formatTime(s.levelFrames), DISPLAY.WIDTH - 4, 5, SHARED.UI_TEXT)
+    }
+    if (s.timerDisplay === 'run' || s.timerDisplay === 'both') {
+      const y = s.timerDisplay === 'both' ? 17 : 5
+      drawTextRight(ctx, formatTime(runFramesNow(s)), DISPLAY.WIDTH - 4, y, SHARED.UI_DIM)
+    }
   }
 }
