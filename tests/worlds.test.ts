@@ -297,8 +297,19 @@ describe('every level keeps the same promises', () => {
         expect(d.par).toBeLessThanOrEqual(360)
       })
 
-      test('two conches through the level and one at the boss door', () => {
+      test('three conches through the level and one at the boss door', () => {
         expect(loaded.checkpoints).toHaveLength(RULES.CHECKPOINTS_PER_LEVEL + 1)
+      })
+
+      /**
+       * Conches are scanned out of the grid row by row, so their order in the
+       * array is *reading* order, not left-to-right order. Anything that wants
+       * "the last one" has to sort — which is a thing two tests here quietly
+       * did not do until a fourth conch was added on a higher row.
+       */
+      test('no two conches sit on top of each other', () => {
+        const xs = loaded.checkpoints.map((c) => c.x).sort((a, b) => a - b)
+        for (let i = 1; i < xs.length; i++) expect(xs[i]! - xs[i - 1]!).toBeGreaterThan(20)
       })
 
       test('it ends in a boss the registry knows about', () => {
@@ -333,7 +344,8 @@ describe('every level keeps the same promises', () => {
 
       /** §7.1: never immediately before a boss door. */
       test('no Ink Core sits near the boss door', () => {
-        const door = loaded.checkpoints[loaded.checkpoints.length - 1]!.x
+        // By position, not by array order — see the note above.
+        const door = Math.max(...loaded.checkpoints.map((c) => c.x))
         for (const core of loaded.entities.filter((e) => e.type === 'inkCore')) {
           expect(door - core.x).toBeGreaterThan(40)
         }
@@ -412,6 +424,27 @@ describe('every level keeps the same promises', () => {
   test('every level after the first opens with something the last one gave you', () => {
     for (const d of campaign().slice(1)) {
       expect(loadoutOnArrival(d.id).length, d.id).toBeGreaterThan(0)
+    }
+  })
+
+  /**
+   * The tuning applied after Gate 3 round one, so a later edit cannot quietly
+   * undo it. Every one of these is a rung on §7.7's ladder, run downwards.
+   */
+  test('every level from World 3 carries an Ink Core, as §7.1 always asked', () => {
+    for (const d of campaign().slice(2)) {
+      const cores = loadCampaignLevel(d).entities.filter((e) => e.type === 'inkCore')
+      expect(cores.length, `${d.id} has no Ink Core`).toBeGreaterThanOrEqual(RULES.INK_CORES_PER_LEVEL[0]!)
+      expect(cores.length).toBeLessThanOrEqual(RULES.INK_CORES_PER_LEVEL[1]!)
+    }
+  })
+
+  test('the longest walk back is no more than a third of a level', () => {
+    for (const d of campaign()) {
+      const loaded = loadCampaignLevel(d)
+      const xs = [0, ...loaded.checkpoints.map((c) => c.x).sort((a, b) => a - b)]
+      const longest = Math.max(...xs.slice(1).map((x, i) => x - xs[i]!))
+      expect(longest, `${d.id}'s longest stretch`).toBeLessThan(loaded.map.width / 2.6)
     }
   })
 

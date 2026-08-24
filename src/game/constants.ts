@@ -144,9 +144,15 @@ export const CHARGED = {
 
 export const RULES = {
   START_LIVES: 3,
-  CONTINUES: 3,
+  // Raised from 3 after Gate 3 round one. A continue is the run's last line of
+  // defence and the cheapest dial on the tuning ladder to move — it costs the
+  // player their shells and the level's progress, so it is already a penalty.
+  CONTINUES: 5,
   SHELLS_PER_LIFE: 100,
-  CHECKPOINTS_PER_LEVEL: 2,
+  // Three conches through a level plus one at the boss door, up from two after
+  // Gate 3 round one. §7.1 spaces them ~70 tiles apart at three; at four the
+  // longest walk back in the game drops by about a third.
+  CHECKPOINTS_PER_LEVEL: 3,
   INK_BULBS_PER_LEVEL: [4, 6],
   INK_CORES_PER_LEVEL: [1, 2],
   RESPAWN_IFRAMES: 60,

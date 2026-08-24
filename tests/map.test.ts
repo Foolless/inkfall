@@ -10,6 +10,7 @@ import {
   type MapProgress,
 } from '../src/game/map.js'
 import { campaign } from '../src/content/levels/index.js'
+import { RULES } from '../src/game/constants.js'
 import { createSession, openMap, updateSession, type Session } from '../src/game/state.js'
 import { defaultSave, recordClear, recordUnlock, type SaveData } from '../src/engine/save.js'
 
@@ -184,8 +185,8 @@ describe('the map screen, driven from the keyboard', () => {
 
     expect(s.screen).toBe('playing')
     expect(s.score).toBe(0)
-    expect(s.lives).toBe(3)
-    expect(s.continues).toBe(3)
+    expect(s.lives).toBe(RULES.START_LIVES)
+    expect(s.continues).toBe(RULES.CONTINUES)
     expect(s.replay).toBe(true)
   })
 

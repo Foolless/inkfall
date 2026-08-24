@@ -238,9 +238,9 @@ export function loadLevel(def: LevelDef): LoadedLevel {
   const exit = exits[0] ? { x: exits[0].tx, y: exits[0].ty } : null
 
   const checkpoints = map.entities.filter((e) => e.kind === 'checkpoint').map((e) => ({ x: e.tx, y: e.ty }))
-  // Two through the level plus one at the boss door. More than that and the
+  // Three through the level plus one at the boss door. More than that and the
   // difficulty has quietly left the checkpoint spacing, which is where the PRD
-  // puts it (§4.5).
+  // puts it (§4.5). Raised from two after Gate 3 round one.
   const maxCheckpoints = RULES.CHECKPOINTS_PER_LEVEL + 1
   if (checkpoints.length > maxCheckpoints) {
     fail(`${checkpoints.length} checkpoints (K); the budget is ${maxCheckpoints}`)
@@ -363,7 +363,7 @@ export function loadCampaignLevel(def: LevelDef): LoadedLevel {
 
   if (!level.exit && def.boss === undefined) fail('has neither an exit (E) nor a boss — it cannot be finished')
 
-  // Sparse, NES-style: two through the level, one at the boss door.
+  // Sparse, NES-style: three through the level, one at the boss door.
   const wanted = RULES.CHECKPOINTS_PER_LEVEL + (def.boss === undefined ? 0 : 1)
   if (level.checkpoints.length !== wanted) {
     fail(`${level.checkpoints.length} checkpoints (K), expected ${wanted}`)

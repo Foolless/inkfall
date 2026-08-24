@@ -90,7 +90,7 @@ describe('malformed grids', () => {
   })
 
   test('more checkpoints than the budget is rejected', () => {
-    expect(() => loadLevel(def({ tiles: ['SKKKK....E', '##########'] }))).toThrow(/checkpoints/)
+    expect(() => loadLevel(def({ tiles: ['SKKKKK...E', '##########'] }))).toThrow(/checkpoints/)
   })
 })
 
@@ -181,7 +181,7 @@ describe('malformed entities', () => {
 describe('campaign rules', () => {
   const playable = (over: Partial<LevelDef> = {}): LevelDef =>
     def({
-      tiles: ['S..K....K.....E', '###############'],
+      tiles: ['S..K...K..K...E', '###############'],
       entities: [
         { type: 'pearl', x: 2, y: 0, id: 0 },
         { type: 'pearl', x: 5, y: 0, id: 1 },
@@ -199,7 +199,7 @@ describe('campaign rules', () => {
   })
 
   test('a level that can be neither exited nor bossed is rejected', () => {
-    expect(() => loadCampaignLevel(playable({ tiles: ['S..K....K......', '###############'] }))).toThrow(
+    expect(() => loadCampaignLevel(playable({ tiles: ['S..K...K..K....', '###############'] }))).toThrow(
       /neither an exit/,
     )
   })
@@ -211,7 +211,7 @@ describe('campaign rules', () => {
   })
 
   test('a boss level wants one more conch — the one at the boss door', () => {
-    expect(() => loadCampaignLevel(playable({ boss: 'hermitKing' }))).toThrow(/expected 3/)
+    expect(() => loadCampaignLevel(playable({ boss: 'hermitKing' }))).toThrow(/expected 4/)
   })
 
   test('anything other than three pearls is rejected', () => {

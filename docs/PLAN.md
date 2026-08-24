@@ -405,8 +405,30 @@ three pips, and the death is still counted so the no-death bonus stays honest.
 §13 says an assist run is stamped rather than blocked, so the clear screen says
 `ASSIST` and the run stands.
 
-**What this does not settle.** Assist Mode makes the game finishable; it does
-not make the classic difficulty correct. Round two should be run **both ways** —
+**The tuning pass that followed.** §7.7's ladder is written for a game that
+reads too easy and names the order to tighten in; run downwards it names the
+order to loosen in, and the first rung is Ink Cores. Checking that rung turned
+up a real gap rather than a judgement call: **§7.1 requires 1–2 Ink Cores from
+World 3 onward, and Worlds 3, 4 and 5 had none.** The primary dial was set to
+zero across the whole back half of the game — the half the complaint was about.
+
+Four changes, in ladder order, each verified by the reachability solver and
+recorded in the PRD's decisions log:
+
+| Rung | Change |
+|---|---|
+| Ink Cores | One each in Worlds 3, 4 and 5, bringing them into line with §7.1 |
+| Ink Bulbs | World 3 raised from 4 to 6, the top of §7.1's range |
+| Checkpoints | A fourth conch per level. The longest walk back drops by about a third |
+| Continues | 3 → 5. A continue already costs the shells and the level, so it has teeth |
+
+Starting lives stay at three: more of those would soften the moment-to-moment
+game, and Gate 1 said that part was fine. Enemies are untouched, per §7.7's own
+rule — making them slower or weaker trades readability for difficulty, which is
+the opposite of the point.
+
+**What this does not settle.** Assist Mode makes the game finishable; the tuning
+pass makes the classic game *more* finishable. Neither proves it is right. Round two should be run **both ways** —
 the assisted run to confirm the game can be completed at all and to get the
 deaths-per-section data Phase 4 needs, and a classic run to find where the curve
 is actually wrong. A mode nobody can turn off is a tuning problem wearing an
