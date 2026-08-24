@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 import { Act, frameFromMasks } from '../src/engine/input.js'
 import { ASSIST, DISPLAY, RULES } from '../src/game/constants.js'
-import { createSession, setAssist, updateSession, type Session } from '../src/game/state.js'
+import { createSession, rebuild, setAssist, updateSession, type Session } from '../src/game/state.js'
 import { createWorld, update } from '../src/game/world.js'
 import { kill } from '../src/game/player.js'
+import { POINTS } from '../src/game/score.js'
 import { drifterYAt } from '../src/game/enemies/drifter.js'
 import { blank, levelFrom } from './helpers.js'
 
@@ -282,5 +283,91 @@ describe('the switch itself', () => {
   test('off by default, so nobody gets it without asking', () => {
     expect(createSession(levelFrom(FLOOR, 'default')).assist).toBe(false)
     expect(createWorld(levelFrom(FLOOR, 'default')).assist).toBe(false)
+  })
+})
+
+/**
+ * Bugs found in the Phase 4 bug clean, each with the failure it caused.
+ *
+ * All three are the same shape: something the game paid out or recorded more
+ * than once, or not at all. None of them crash, which is why they survived —
+ * a wrong number is invisible until somebody adds up the receipts.
+ */
+describe('paying exactly once', () => {
+  // Pearls are entities, not grid glyphs — the grid is just floor and air.
+  const withPearl = ['S.........E', '###########']
+
+  test('a pearl already banked is not there to collect again', () => {
+    const fresh = createWorld(levelFrom(withPearl, 'p1', [{ type: 'pearl', x: 4, y: 0, id: 0 }]))
+    const replay = createWorld(levelFrom(withPearl, 'p2', [{ type: 'pearl', x: 4, y: 0, id: 0 }]), {
+      found: [true, false, false],
+    })
+    expect(fresh.pickups.find((p) => p.kind === 'pearl')!.taken).toBe(false)
+    expect(replay.pickups.find((p) => p.kind === 'pearl')!.taken).toBe(true)
+  })
+
+  /**
+   * §8.3 pays a pearl 5,000 points and an extra life on the run that *first*
+   * finds it. Without the guard, every replay of a cleared level paid both
+   * again — which Phase 4's free replay turns from theory into a life farm.
+   */
+  test('replaying a level does not re-pay the pearl in points or lives', () => {
+    const entities = [{ type: 'pearl', x: 4, y: 0, id: 0 }] as const
+    const replay = createWorld(levelFrom(withPearl, 'p3', entities), { found: [true, false, false] })
+    replay.player.x = 4 * 16
+    for (let i = 0; i < 30; i++) update(replay, blank())
+    expect(replay.score).toBe(0)
+    expect(replay.livesOwed).toBe(0)
+    expect(replay.pearls).toEqual([false, false, false])
+  })
+
+  test('a pearl not yet found still pays, exactly once', () => {
+    const w = createWorld(levelFrom(withPearl, 'p4', [{ type: 'pearl', x: 4, y: 0, id: 0 }]))
+    w.player.x = 4 * 16
+    for (let i = 0; i < 30; i++) update(w, blank())
+    expect(w.score).toBe(POINTS.PEARL)
+    expect(w.livesOwed).toBe(1)
+  })
+})
+
+describe('the run, not the level, is what goes on the board', () => {
+  test('clearing a level does not end the run', () => {
+    const s = createSession(levelFrom(FLOOR, 'w'), {})
+    const p = new Play(s)
+    p.tap(Act.Jump).step(0, 5)
+    s.world.cleared = true
+    p.step(0, 2)
+    expect(s.pendingScore).toBe(false)
+  })
+
+  /**
+   * The bug: the high-score table is the top ten *runs*, and an entry was
+   * written on every level clear — so one playthrough filled five slots with
+   * five partial snapshots of itself, each beating the last.
+   */
+  test('running out of continues ends it, once', () => {
+    const s = createSession(levelFrom(FLOOR, 'x'), {})
+    const p = new Play(s)
+    p.tap(Act.Jump)
+    s.continues = 0
+    for (let i = 0; i < RULES.START_LIVES; i++) p.die()
+    expect(s.screen).toBe('gameOver')
+    p.tap(Act.Jump)
+    expect(s.screen).toBe('title')
+    expect(s.pendingScore).toBe(true)
+  })
+
+  test('the run counts its own deaths, across levels', () => {
+    const s = createSession(levelFrom(FLOOR, 'y'), { assist: true })
+    const p = new Play(s)
+    p.tap(Act.Jump)
+    p.die().die()
+    expect(s.deaths).toBe(2)
+    expect(s.world.player.deaths).toBe(2)
+    // A fresh level resets the world's count; the run's keeps going.
+    s.world = rebuild(s, s.level)
+    s.deathsCharged = 0
+    p.die()
+    expect(s.deaths).toBe(3)
   })
 })

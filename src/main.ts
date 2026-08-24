@@ -6,7 +6,7 @@ import { startLoop } from './engine/loop.js'
 import { Renderer } from './engine/renderer.js'
 import { campaign, levelDef } from './content/levels/index.js'
 import { bossCameraLock } from './game/world.js'
-import { createSession, nextLevel, setAssist, updateSession } from './game/state.js'
+import { createSession, nextLevel, rebuild, setAssist, updateSession } from './game/state.js'
 import type { LevelDef } from './content/levels/format.js'
 import { kill } from './game/player.js'
 import {
@@ -54,6 +54,10 @@ if (loaded.message) showToast(loaded.message)
 const session = createSession(startLevel, {
   upgrades: maskOf(save.progress.upgrades),
   assist: save.settings.assistMode,
+  // Read live rather than snapshotted: the save is replaced on every clear,
+  // and a pearl banked in World 2 must be known by the time World 2 is
+  // replayed later in the same sitting.
+  foundPearls: (id) => save.progress.pearls[id] ?? [],
 })
 const audio = new Audio()
 
@@ -96,7 +100,7 @@ function showToast(message: string): void {
  * and finding yourself in World 3 is one frame, and the pearls belong to the
  * world behind you.
  */
-function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number, deaths: number): void {
+function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number): void {
   if (!canWrite) return
 
   // Upgrades first: they are the thing whose loss would cost the most, and
@@ -109,12 +113,23 @@ function persist(finished: LevelDef, pearls: readonly boolean[], seconds: number
   save = recordClear(save, finished.id, { pearls, seconds })
   const next = nextLevel(finished.id)
   if (next) save = recordUnlock(save, next.id)
+  writeSave(window.localStorage, save)
+}
+
+/**
+ * The run's entry on the board, written once when the run ends.
+ *
+ * §8.2's table is the top ten *runs*. Writing on every level clear filled it
+ * with five partial snapshots of the same playthrough instead.
+ */
+function bankScore(): void {
+  if (!canWrite) return
   save = recordHighScore(save, {
     score: session.score,
     character: save.characters.selected,
     date: new Date().toISOString().slice(0, 10),
     levelsCleared: save.progress.cleared.length,
-    deaths,
+    deaths: session.deaths,
   })
   writeSave(window.localStorage, save)
 }
@@ -130,16 +145,19 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyR' && session.screen === 'playing') {
     e.preventDefault()
-    session.world = createSession(session.level, { upgrades: session.upgrades, assist: session.assist }).world
+    session.world = rebuild(session, session.level)
     session.levelFrames = 0
     session.deathsCharged = session.world.player.deaths
   }
   // Assist Mode is a title-screen switch and a saved setting (PRD §13). On one
   // key, next to the label that names it, because the player who needs it is
   // the least likely to go hunting through a menu for it.
-  if (e.code === 'KeyA') {
+  //
+  // `A` is also the WASD binding for Left, so this must not touch the event
+  // unless it actually toggled — `setAssist` refuses anywhere but the title and
+  // the game-over screen, and swallowing the key mid-level would eat a step.
+  if (e.code === 'KeyA' && setAssist(session, !session.assist)) {
     e.preventDefault()
-    if (!setAssist(session, !session.assist)) return
     if (!canWrite) return
     save = { ...save, settings: { ...save.settings, assistMode: session.assist } }
     writeSave(window.localStorage, save)
@@ -159,7 +177,6 @@ startLoop({
     const owed = {
       pearls: [...session.world.pearls],
       seconds: session.levelFrames / 60,
-      deaths: session.world.player.deaths,
     }
 
     updateSession(session, input)
@@ -167,7 +184,11 @@ startLoop({
     if (session.screen !== screenBefore) audio.play('menu')
     if (session.pendingSave) {
       session.pendingSave = false
-      persist(levelBefore, owed.pearls, owed.seconds, owed.deaths)
+      persist(levelBefore, owed.pearls, owed.seconds)
+    }
+    if (session.pendingScore) {
+      session.pendingScore = false
+      bankScore()
     }
     // A new world is a new chapter, and a chapter owns the music.
     if (session.level !== levelBefore) playChapterTheme()
@@ -218,7 +239,7 @@ window.__inkfall = {
   lives: () => session.lives,
   score: () => session.score + session.world.score,
   reset: () => {
-    session.world = createSession(session.level, { upgrades: session.upgrades, assist: session.assist }).world
+    session.world = rebuild(session, session.level)
     session.deathsCharged = 0
   },
   kill: () => {

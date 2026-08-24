@@ -233,6 +233,42 @@ describe('the level-clear tally', () => {
     expect(s.score).toBeGreaterThan(POINTS.LEVEL_CLEAR)
   })
 
+  /**
+   * The bug this exists to stop coming back: the run banked only the tally's
+   * bonuses, so every stomp, chain, inked kill and boss hit a player made
+   * inside a level was thrown away at the exit — after the HUD had spent the
+   * whole level showing them those points.
+   */
+  test('points earned inside the level are banked, not discarded', () => {
+    p.tap(Act.Jump).step(0, 5)
+    s.world.score = 4_250 // stomps, a chain, a boss hit
+    s.world.cleared = true
+    p.step(0)
+
+    expect(s.summary!.levelPoints).toBe(4_250)
+    expect(s.tally.map((l) => l.label)).toContain('ENEMIES')
+    p.step(0, TALLY_LINE_FRAMES * 10).tap(Act.Jump)
+    expect(s.score).toBeGreaterThanOrEqual(4_250)
+  })
+
+  /**
+   * The HUD shows `run + world` while playing and the tally counts up from
+   * `run` — so the tally's lines have to sum to exactly what the world scored,
+   * plus the bonuses, or the number visibly jumps at the exit.
+   */
+  test('the itemised lines account for every point the world scored', () => {
+    p.tap(Act.Jump).step(0, 5)
+    s.world.shells = 12
+    s.world.pearls = [true, false, false]
+    s.world.score = 12 * POINTS.SHELL + POINTS.PEARL + 900
+    s.world.cleared = true
+    p.step(0)
+
+    const earned = ['SHELLS', 'PEARLS', 'BOSS', 'ENEMIES']
+    const itemised = s.tally.filter((l) => earned.includes(l.label)).reduce((n, l) => n + l.points, 0)
+    expect(itemised).toBe(s.world.score)
+  })
+
   test('the time bonus comes off a par clock, and never goes negative', () => {
     p.tap(Act.Jump)
     s.levelFrames = (DEFAULT_PAR_SECONDS + 60) * 60 // well over par

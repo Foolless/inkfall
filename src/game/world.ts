@@ -141,6 +141,17 @@ export interface WorldOptions {
    * classic one are two different runs, and both are deterministic.
    */
   assist?: boolean
+  /**
+   * Pearls this player has already banked in this level, by id.
+   *
+   * §8.3 makes a pearl worth 5,000 points and an extra life **on the run that
+   * first finds it**. Without this the game pays both again on every replay,
+   * which turns any cleared level into a life farm — and Phase 4's free replay
+   * of cleared levels is what makes that reachable rather than theoretical.
+   * An already-found pearl is spawned already taken: it is not drawn, cannot be
+   * collected, and does not appear in the level's tally.
+   */
+  found?: readonly boolean[]
 }
 
 export interface Hint extends HintDef {
@@ -182,7 +193,7 @@ export function createWorld(source: LevelDef | LoadedLevel, options: WorldOption
         y: e.y * T + (T - size) / 2,
         w: size,
         h: size,
-        taken: false,
+        taken: e.type === 'pearl' && options.found?.[e.id] === true,
       }
     })
 

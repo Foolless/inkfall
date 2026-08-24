@@ -10,10 +10,17 @@ import { expect, test, type Page } from '@playwright/test'
  * changes is the same user action and is not a race.
  */
 async function confirmUntil(page: Page, screen: string): Promise<void> {
-  await expect(async () => {
+  for (let i = 0; i < 20; i++) {
+    const now = await page.evaluate(() => window.__inkfall!.screen())
+    if (now === screen) return
     await page.keyboard.press('Space')
-    expect(await page.evaluate(() => window.__inkfall!.screen())).toBe(screen)
-  }).toPass({ timeout: 10_000 })
+    // `press` only *dispatches* the key — the simulation consumes it on its next
+    // frame. Waiting for the screen to actually change is what stops the next
+    // press landing on the screen this one just reached, which is how a target
+    // of `title` gets overshot into `playing` and never observed at all.
+    await page.waitForFunction((s) => window.__inkfall?.screen() !== s, now, { timeout: 2_000 }).catch(() => {})
+  }
+  throw new Error(`never reached the ${screen} screen`)
 }
 
 /**

@@ -39,6 +39,13 @@ export interface Session {
   levelFrames: number
   /** Deaths already charged to the life counter, so one death costs one life. */
   deathsCharged: number
+  /**
+   * Deaths across the whole run, for the high-score table (§8.2).
+   *
+   * Separate from the world's count, which resets with every level, and from
+   * `deathsCharged`, which is bookkeeping for the life counter.
+   */
+  deaths: number
   summary: ClearSummary | null
   tally: readonly TallyLine[]
   /** Frames since the tally started, driving the count-up. */
@@ -70,6 +77,15 @@ export interface Session {
    */
   assist: boolean
   /**
+   * Which pearls this player has already banked, by level id.
+   *
+   * A function rather than a snapshot, because the session outlives any one
+   * level and has to ask again when it advances. §8.3 pays a pearl once, on the
+   * run that first finds it; without this a cleared level is a life farm.
+   * Defaults to "none found", which is what a fresh save means.
+   */
+  foundPearls: (levelId: string) => readonly boolean[]
+  /**
    * Frames since the session began, ticking on every screen.
    *
    * Menus need a clock and the world's does not run on the title, so this is
@@ -85,6 +101,15 @@ export interface Session {
    * of the replay path entirely.
    */
   pendingSave: boolean
+  /**
+   * Set once, when the run itself is over — the game cleared, or the last
+   * continue spent. Drained by the host, like `pendingSave`.
+   *
+   * §8.2's table is the top ten *runs*. Recording on every level clear instead
+   * filled it with five partial snapshots of the same playthrough, each one
+   * beating the last, so a good run pushed out nine other people's.
+   */
+  pendingScore: boolean
 }
 
 /** Par clocks are per level; this is what an unauthored one falls back to. */
@@ -95,20 +120,27 @@ export interface SessionOptions {
   upgrades?: number
   /** Assist Mode, from their settings. PRD §13. */
   assist?: boolean
+  /** Pearls already banked, by level id. See `Session.foundPearls`. */
+  foundPearls?: (levelId: string) => readonly boolean[]
 }
+
+/** A fresh save has found nothing anywhere. */
+const NONE_FOUND: readonly boolean[] = []
 
 export function createSession(level: LevelDef, options: SessionOptions = {}): Session {
   const upgrades = options.upgrades ?? 0
   const assist = options.assist ?? false
+  const foundPearls = options.foundPearls ?? (() => NONE_FOUND)
   return {
     screen: 'title',
     level,
-    world: createWorld(level, { upgrades, assist }),
+    world: createWorld(level, { upgrades, assist, found: foundPearls(level.id) }),
     lives: RULES.START_LIVES,
     continues: RULES.CONTINUES,
     score: 0,
     levelFrames: 0,
     deathsCharged: 0,
+    deaths: 0,
     summary: null,
     tally: [],
     tallyClock: 0,
@@ -117,8 +149,10 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
     upgrades,
     granted: [],
     assist,
+    foundPearls,
     uiFrames: 0,
     pendingSave: false,
+    pendingScore: false,
   }
 }
 
@@ -132,8 +166,20 @@ export function createSession(level: LevelDef, options: SessionOptions = {}): Se
 export function setAssist(s: Session, on: boolean): boolean {
   if (s.screen !== 'title' && s.screen !== 'gameOver') return false
   s.assist = on
-  s.world = createWorld(s.level, { upgrades: s.upgrades, assist: on })
+  s.world = rebuild(s, s.level, on)
   return true
+}
+
+/**
+ * A fresh world for a level, carrying everything the run holds.
+ *
+ * One place, because there are five of them — starting a run, continuing,
+ * advancing a level, toggling assist, and the host's restart key — and a
+ * rebuild that forgot one of upgrades, assist or found pearls would be a bug
+ * you only meet on the fourth level of a second playthrough.
+ */
+export function rebuild(s: Session, level: LevelDef, assist = s.assist): World {
+  return createWorld(level, { upgrades: s.upgrades, assist, found: s.foundPearls(level.id) })
 }
 
 /** Confirm is Space or Z; Esc and Enter pause. Both confirm on a menu. */
@@ -162,7 +208,7 @@ export function updateSession(s: Session, input: InputFrame): void {
     case 'gameOver':
       if (!confirmed(input)) return
       if (s.continues > 0) useContinue(s)
-      else s.screen = 'title'
+      else endRun(s)
       return
     case 'gameClear':
       // The end of the game, and the only screen with nothing after it. A
@@ -173,12 +219,19 @@ export function updateSession(s: Session, input: InputFrame): void {
 }
 
 function startRun(s: Session): void {
-  s.world = createWorld(s.level, { upgrades: s.upgrades, assist: s.assist })
+  s.world = rebuild(s, s.level)
   s.lives = RULES.START_LIVES
   s.continues = RULES.CONTINUES
   s.score = 0
+  s.deaths = 0
   beginLevel(s)
   s.screen = 'playing'
+}
+
+/** The run is over — cleared out or played out. Its score goes on the board. */
+function endRun(s: Session): void {
+  s.screen = 'title'
+  s.pendingScore = true
 }
 
 function beginLevel(s: Session): void {
@@ -198,7 +251,7 @@ function beginLevel(s: Session): void {
  */
 function useContinue(s: Session): void {
   s.continues--
-  s.world = createWorld(s.level, { upgrades: s.upgrades, assist: s.assist })
+  s.world = rebuild(s, s.level)
   s.lives = RULES.START_LIVES
   beginLevel(s)
   s.screen = 'playing'
@@ -252,6 +305,7 @@ function chargeDeaths(s: Session): void {
     // The counter is what the run costs; the death is what happened, and the
     // no-death bonus has to stay honest or the tally is a different game's.
     if (!s.assist) s.lives--
+    s.deaths++
     s.noDeath = false
   }
   if (!s.assist && s.lives <= 0) s.screen = 'gameOver'
@@ -267,6 +321,10 @@ function clearLevel(s: Session): void {
     bossDefeated: s.level.boss !== undefined,
     noDamage: s.noDamage,
     noDeath: s.noDeath,
+    // Everything earned inside the level comes with it. Banking only the
+    // bonuses would throw away every stomp, chain and boss hit the player made
+    // — and the HUD had already shown them the points.
+    levelPoints: w.score,
   }
   s.tally = clearTally(s.summary)
   s.tallyClock = 0
@@ -319,11 +377,12 @@ function finishLevel(s: Session): void {
     // The last world is cleared. There is nothing after this.
     s.screen = 'gameClear'
     s.uiFrames = 0
+    s.pendingScore = true
     return
   }
 
   s.level = next
-  s.world = createWorld(next, { upgrades: s.upgrades, assist: s.assist })
+  s.world = rebuild(s, next)
   beginLevel(s)
   s.screen = 'playing'
 }

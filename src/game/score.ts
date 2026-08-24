@@ -56,6 +56,16 @@ export interface ClearSummary {
   noDamage: boolean
   /** Never lost a life this run through the level. */
   noDeath: boolean
+  /**
+   * Everything the world scored inside the level: shells, pearls, the boss,
+   * and every enemy stomped, inked or dashed through.
+   *
+   * The tally itemises *this same number* rather than recomputing it, which is
+   * what keeps the count-up honest: the HUD ticks live as points are earned,
+   * and the clear screen starts from exactly where the HUD left off instead of
+   * quietly disagreeing with it.
+   */
+  levelPoints: number
 }
 
 export interface TallyLine {
@@ -75,9 +85,24 @@ export function clearTally(s: ClearSummary): TallyLine[] {
   const lines: TallyLine[] = [{ label: 'LEVEL CLEAR', points: POINTS.LEVEL_CLEAR }]
 
   if (seconds > 0) lines.push({ label: 'TIME', points: seconds * POINTS.PER_SECOND_REMAINING })
-  if (s.shells > 0) lines.push({ label: 'SHELLS', points: s.shells * POINTS.SHELL })
-  if (s.pearlsFound > 0) lines.push({ label: 'PEARLS', points: s.pearlsFound * POINTS.PEARL })
-  if (s.bossDefeated) lines.push({ label: 'BOSS', points: POINTS.BOSS })
+
+  // The itemised half. Shells, pearls and the boss are named because the player
+  // went and got them; everything else the level was worth — stomps, chains,
+  // inked kills, Charged dash-throughs, a Bulb taken at a tier already held —
+  // is one ENEMIES line, because "STOMP CHAIN x3" is a receipt, not a reward.
+  const shells = s.shells * POINTS.SHELL
+  const pearls = s.pearlsFound * POINTS.PEARL
+  const boss = s.bossDefeated ? POINTS.BOSS : 0
+  if (s.shells > 0) lines.push({ label: 'SHELLS', points: shells })
+  if (s.pearlsFound > 0) lines.push({ label: 'PEARLS', points: pearls })
+  if (s.bossDefeated) lines.push({ label: 'BOSS', points: boss })
+
+  // Whatever the world scored that the three lines above have not claimed.
+  // Derived by subtraction rather than counted separately, so the tally and the
+  // HUD cannot drift apart: the lines always sum to exactly `levelPoints`.
+  const enemies = s.levelPoints - shells - pearls - boss
+  if (enemies > 0) lines.push({ label: 'ENEMIES', points: enemies })
+
   if (s.noDamage) lines.push({ label: 'NO DAMAGE', points: POINTS.NO_DAMAGE })
   if (s.noDeath) lines.push({ label: 'NO DEATH', points: POINTS.NO_DEATH })
 
